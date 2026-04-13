@@ -130,21 +130,24 @@
         /* 一级分类栏 (淡淡的文字，选中有小黑点) */
         .category-tabs {
             display: flex;
-            padding: 0 20px 15px;
-            gap: 25px;
-            overflow-x: auto;
+            padding: 0 14px 15px;
+            gap: 10px;
+            justify-content: space-between;
+            overflow-x: visible;
             scrollbar-width: none;
         }
         .category-tabs::-webkit-scrollbar { display: none; }
 
         .tab-item {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-sub);
             cursor: pointer;
             position: relative;
             white-space: nowrap;
             padding-bottom: 6px;
             transition: color 0.3s;
+            flex: 1;
+            text-align: center;
         }
 
         .tab-item.active {
@@ -343,14 +346,20 @@
             'small': ['普通', '水印体验卡']
         };
 
+        const STORAGE_KEY = 'dwxie';
         const state = {
             activeCategory: 'plain',
             activeEffect: '普通',
             baseImage: null,
             watermarkImage: null,
+            baseImageDataUrl: '',
+            watermarkImageDataUrl: '',
             sizePercent: 100,
             opacityPercent: 100,
-            repeatFill: true
+            repeatFill: true,
+            layerConfigs: {
+                plain: { effect: '普通', sizePercent: 100, opacityPercent: 100, repeatFill: true }
+            }
         };
 
         const TEXTURE_URL = 'https://img.heliar.top/file/1776105857230_IMG_5465.jpeg';
@@ -387,13 +396,99 @@
             return layer;
         }
 
+        function saveActiveLayerConfig() {
+            state.layerConfigs[state.activeCategory] = {
+                effect: state.activeEffect,
+                sizePercent: state.sizePercent,
+                opacityPercent: state.opacityPercent,
+                repeatFill: state.repeatFill
+            };
+        }
+
+        function loadLayerConfig(cat) {
+            const cfg = state.layerConfigs[cat];
+            if (!cfg) return false;
+            state.activeEffect = cfg.effect || state.activeEffect;
+            state.sizePercent = Number(cfg.sizePercent || state.sizePercent);
+            state.opacityPercent = Number(cfg.opacityPercent || state.opacityPercent);
+            state.repeatFill = Boolean(cfg.repeatFill);
+            sizeSlider.value = String(state.sizePercent);
+            opacitySlider.value = String(state.opacityPercent);
+            return true;
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                    activeCategory: state.activeCategory,
+                    activeEffect: state.activeEffect,
+                    sizePercent: state.sizePercent,
+                    opacityPercent: state.opacityPercent,
+                    repeatFill: state.repeatFill,
+                    layerConfigs: state.layerConfigs,
+                    baseImageDataUrl: state.baseImageDataUrl || '',
+                    watermarkImageDataUrl: state.watermarkImageDataUrl || ''
+                }));
+            } catch (_) {}
+        }
+
+        function loadImageFromDataUrl(dataUrl) {
+            return new Promise((resolve, reject) => {
+                if (!dataUrl) return resolve(null);
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = dataUrl;
+            });
+        }
+
+        async function restoreState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return;
+                const saved = JSON.parse(raw);
+
+                state.activeCategory = saved.activeCategory || state.activeCategory;
+                state.activeEffect = saved.activeEffect || state.activeEffect;
+                state.sizePercent = Number(saved.sizePercent || state.sizePercent);
+                state.opacityPercent = Number(saved.opacityPercent || state.opacityPercent);
+                state.repeatFill = Boolean(saved.repeatFill);
+                state.layerConfigs = saved.layerConfigs || state.layerConfigs;
+                state.baseImageDataUrl = saved.baseImageDataUrl || '';
+                state.watermarkImageDataUrl = saved.watermarkImageDataUrl || '';
+
+                tabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-cat') === state.activeCategory));
+                loadLayerConfig(state.activeCategory);
+                renderEffectList(state.activeCategory);
+
+                if (state.baseImageDataUrl) {
+                    const base = await loadImageFromDataUrl(state.baseImageDataUrl);
+                    if (base) {
+                        state.baseImage = base;
+                        hint.style.display = 'none';
+                        canvas.width = base.width;
+                        canvas.height = base.height;
+                    }
+                }
+
+                if (state.watermarkImageDataUrl) {
+                    const wm = await loadImageFromDataUrl(state.watermarkImageDataUrl);
+                    if (wm) state.watermarkImage = wm;
+                }
+
+                if (state.baseImage) {
+                    await renderPreview();
+                }
+            } catch (_) {}
+        }
+
         function drawBase() {
             if (!state.baseImage) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(state.baseImage, 0, 0, canvas.width, canvas.height);
         }
 
-        function drawDefaultWatermark() {
+        function drawDefaultWatermark(category, config) {
             if (!state.baseImage || !state.watermarkImage) return;
 
             const wm = state.watermarkImage;
@@ -404,43 +499,29 @@
             let targetW;
             let targetH;
 
-            // 所有分类都吃“大小”滑杆：
-            // - full/pattern/plain/box：按画布宽度比例缩放
-            // - small：更小的比例范围
-            if (state.activeCategory === 'small') {
-                targetW = baseW * Math.max(0.06, state.sizePercent / 260);
+            if (category === 'small') {
+                targetW = baseW * Math.max(0.06, config.sizePercent / 260);
                 targetH = targetW * ratio;
             } else {
-                targetW = baseW * Math.max(0.1, state.sizePercent / 100);
+                targetW = baseW * Math.max(0.1, config.sizePercent / 100);
                 targetH = targetW * ratio;
             }
 
             const x = (baseW - targetW) / 2;
             const y = (baseH - targetH) / 2;
 
-            // 图层模式：普白/小水印(普通)固定普通；全屏/底纹可选叠加/柔光叠加/柔光
             let blendMode = 'source-over';
             let blendPass = 1;
-            if (state.activeCategory === 'full' || state.activeCategory === 'pattern') {
-                if (state.activeEffect === '叠加') {
-                    blendMode = 'overlay';
-                    blendPass = 1;
-                }
-                if (state.activeEffect === '柔光叠加') {
-                    blendMode = 'soft-light';
-                    blendPass = 2;
-                }
-                if (state.activeEffect === '柔光') {
-                    blendMode = 'soft-light';
-                    blendPass = 1;
-                }
+            if (category === 'full' || category === 'pattern') {
+                if (config.effect === '叠加') { blendMode = 'overlay'; blendPass = 1; }
+                if (config.effect === '柔光叠加') { blendMode = 'soft-light'; blendPass = 2; }
+                if (config.effect === '柔光') { blendMode = 'soft-light'; blendPass = 1; }
             }
 
             const layer = createLayerCanvas();
             const lctx = layer.getContext('2d');
 
-            if (state.repeatFill) {
-                // 关键：缩小后用缩小尺寸作为 pattern tile，自动重复铺满画布
+            if (config.repeatFill) {
                 const tileW = Math.max(1, Math.floor(targetW));
                 const tileH = Math.max(1, Math.floor(targetH));
                 const temp = document.createElement('canvas');
@@ -457,25 +538,25 @@
             ctx.save();
             ctx.globalCompositeOperation = blendMode;
             for (let i = 0; i < blendPass; i++) {
-                ctx.globalAlpha = (state.opacityPercent / 100) / blendPass;
+                ctx.globalAlpha = (config.opacityPercent / 100) / blendPass;
                 ctx.drawImage(layer, 0, 0);
             }
             ctx.restore();
             ctx.globalCompositeOperation = 'source-over';
         }
 
-        async function drawExperienceCardEffect() {
+        async function drawExperienceCardEffect(category, config) {
             if (!state.baseImage || !state.watermarkImage) return;
 
             const baseW = canvas.width;
             const baseH = canvas.height;
             const wm = state.watermarkImage;
-            const alpha = state.opacityPercent / 100;
-            const wmScale = Math.max(0.1, state.sizePercent / 100);
+            const alpha = config.opacityPercent / 100;
+            const wmScale = Math.max(0.1, config.sizePercent / 100);
             let targetW = baseW * wmScale;
             // 小水印分类下体验卡走更小范围
-            if (state.activeCategory === 'small') {
-                targetW = baseW * Math.max(0.06, state.sizePercent / 260);
+            if (category === 'small') {
+                targetW = baseW * Math.max(0.06, config.sizePercent / 260);
             }
             const targetH = targetW * ((wm.height / wm.width) || 1);
             const x = (baseW - targetW) / 2;
@@ -484,7 +565,7 @@
             // 生成素体蒙版（后续所有“剪切”都按剪辑蒙版逻辑：素材层 * mask）
             const maskLayer = createLayerCanvas();
             const mctx = maskLayer.getContext('2d');
-            if (state.repeatFill) {
+            if (config.repeatFill) {
                 // 关键：体验卡也按滑杆缩放后的 tile 尺寸重复铺满
                 const tileW = Math.max(1, Math.floor(targetW));
                 const tileH = Math.max(1, Math.floor(targetH));
@@ -533,6 +614,13 @@
             bctx.drawImage(state.baseImage, 0, 0, baseW, baseH);
             bctx.filter = 'none';
             const layer1 = clipWithMask(blurLayer, layer1Mask);
+
+            // 第一层增强可见度：在剪辑结果内叠一层黑素体，避免“看不见”
+            const l1v = layer1.getContext('2d');
+            l1v.save();
+            l1v.globalAlpha = 0.28;
+            l1v.drawImage(maskLayer, 0, 0);
+            l1v.restore();
 
             // 第二层（叠加）：用户导入水印 + 指定贴图重复铺满，剪辑蒙版后合并
             const layer2Material = createLayerCanvas();
@@ -622,11 +710,18 @@
             drawBase();
             if (!state.baseImage || !state.watermarkImage) return;
 
-            const isExperience = (state.activeCategory === 'box' || state.activeCategory === 'small') && state.activeEffect === '水印体验卡';
-            if (isExperience) {
-                await drawExperienceCardEffect();
-            } else {
-                drawDefaultWatermark();
+            // 按固定顺序累计渲染，前面打过的水印不会消失
+            const layerOrder = ['plain', 'pattern', 'full', 'box', 'small'];
+            for (const category of layerOrder) {
+                const cfg = state.layerConfigs[category];
+                if (!cfg) continue;
+
+                const isExperience = (category === 'box' || category === 'small') && cfg.effect === '水印体验卡';
+                if (isExperience) {
+                    await drawExperienceCardEffect(category, cfg);
+                } else {
+                    drawDefaultWatermark(category, cfg);
+                }
             }
         }
 
@@ -644,7 +739,9 @@
                     document.querySelectorAll('.effect-box:not(.add-wm-btn)').forEach(b => b.classList.remove('active'));
                     box.classList.add('active');
                     state.activeEffect = effectName;
+                    saveActiveLayerConfig();
                     renderPreview();
+                    saveState();
                 });
 
                 dynamicEffectsContainer.appendChild(box);
@@ -657,11 +754,14 @@
 
         tabs.forEach(tab => {
             tab.addEventListener('click', function() {
+                saveActiveLayerConfig();
                 tabs.forEach(t => t.classList.remove('active'));
                 this.classList.add('active');
                 state.activeCategory = this.getAttribute('data-cat');
+                loadLayerConfig(state.activeCategory);
                 renderEffectList(state.activeCategory);
                 renderPreview();
+                saveState();
             });
         });
 
@@ -674,10 +774,12 @@
                 const img = new Image();
                 img.onload = function() {
                     state.baseImage = img;
+                    state.baseImageDataUrl = event.target.result;
                     hint.style.display = 'none';
                     canvas.width = img.width;
                     canvas.height = img.height;
                     renderPreview();
+                    saveState();
                 };
                 img.src = event.target.result;
             };
@@ -693,7 +795,9 @@
                 const img = new Image();
                 img.onload = function() {
                     state.watermarkImage = img;
+                    state.watermarkImageDataUrl = event.target.result;
                     renderPreview();
+                    saveState();
                 };
                 img.src = event.target.result;
             };
@@ -702,18 +806,24 @@
 
         sizeSlider.addEventListener('input', function(e) {
             state.sizePercent = Number(e.target.value);
+            saveActiveLayerConfig();
             renderPreview();
+            saveState();
         });
 
         opacitySlider.addEventListener('input', function(e) {
             state.opacityPercent = Number(e.target.value);
+            saveActiveLayerConfig();
             renderPreview();
+            saveState();
         });
 
         // 双击预览区切换“重复铺满”
         document.querySelector('.preview-area').addEventListener('dblclick', function() {
             state.repeatFill = !state.repeatFill;
+            saveActiveLayerConfig();
             renderPreview();
+            saveState();
         });
 
         // 导出当前预览为 PNG
@@ -735,7 +845,9 @@
             link.click();
         });
 
+        saveActiveLayerConfig();
         renderEffectList(state.activeCategory);
+        restoreState();
     </script>
 </body>
 </html>
