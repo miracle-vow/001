@@ -1,853 +1,2012 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>轻颜水印 - 极简排版</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>水印工具</title>
+    <meta name="description" content="一键打水印 / 一键改格式" />
     <style>
-        /* 淡淡的高级感配色系 */
-        :root {
-            --light-bg: #FDFDFD;       /* 极浅的背景白 */
-            --pure-white: #FFFFFF;     /* 纯白 */
-            --text-main: #222222;      /* 柔和的深灰黑 */
-            --text-sub: #999999;       /* 淡淡的次级文字 */
-            --border-soft: #F0F0F0;    /* 极细柔和边框 */
-            --active-color: #262626;   /* 选中时的颜色 */
-            --btn-blue: #0088CC;       /* 淡淡的强调蓝（比如导出按钮） */
-            --shadow-light: 0 8px 30px rgba(0,0,0,0.03); 
+      :root{
+        --bg: #ffffff;
+        --text: #111827;
+        --muted: rgba(17,24,39,.6);
+        --card: rgba(255,255,255,.92);
+        --stroke: rgba(17,24,39,.10);
+        --shadow: 0 18px 48px rgba(17,24,39,.08);
+        --shadow2: 0 10px 28px rgba(17,24,39,.06);
+        --radius: 18px;
+        --light-bg: #FDFDFD;
+        --pure-white: #FFFFFF;
+        --text-main: #222222;
+        --text-sub: #999999;
+        --border-soft: #F0F0F0;
+        --active-color: #262626;
+        --btn-blue: #0088CC;
+        --shadow-light: 0 8px 30px rgba(0,0,0,0.03);
+      }
+      *{ box-sizing: border-box; }
+      html,body{ height:100%; }
+      body{
+        margin:0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+        color: var(--text);
+        background: var(--bg);
+      }
+      body.route-app{
+        background-color: #F5F5F7;
+        font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color: var(--text-main);
+      }
+      a{ color: inherit; text-decoration: none; }
+      .wrap{
+        min-height: 100%;
+        display:flex;
+        align-items:flex-start;
+        justify-content:center;
+        padding: 28px 18px;
+      }
+      body.route-app .wrap{
+        align-items:center;
+        padding: 0;
+      }
+      .shell{
+        width: min(980px, 100%);
+      }
+      body.route-app .shell{
+        width: 100%;
+        max-width: 414px;
+        height: 100%;
+        max-height: 850px;
+      }
+      /* watermark (reference-like) */
+      .appBox{
+        width: 100%;
+        height: 100%;
+        background-color: var(--light-bg);
+        display:flex;
+        flex-direction: column;
+        position: relative;
+      }
+      @media (min-width: 450px){
+        body.route-app .appBox{
+          height: 90vh;
+          border-radius: 24px;
+          overflow:hidden;
+          box-shadow: var(--shadow-light);
         }
+      }
+      .wmHeader{
+        height: 50px;
+        display:flex;
+        justify-content: space-between;
+        align-items:center;
+        padding: 0 20px;
+        background-color: var(--pure-white);
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .wmHeader .btn{
+        font-size: 15px;
+        color: var(--text-main);
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+      }
+      .wmHeader .btnExport{
+        color: var(--btn-blue);
+        font-weight: 500;
+      }
+      .wmHeader .title{
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 1px;
+      }
+      .previewArea{
+        width: 100%;
+        aspect-ratio: 4 / 5;
+        background-color: #F8F8F8;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        position: relative;
+        cursor: pointer;
+        overflow:hidden;
+      }
+      .uploadHint{
+        position: absolute;
+        display:flex;
+        flex-direction: column;
+        align-items:center;
+        color: var(--text-sub);
+        font-size: 14px;
+        letter-spacing: 1px;
+        text-align:center;
+        padding: 18px;
+      }
+      .uploadHint svg{
+        width: 32px;
+        height: 32px;
+        margin-bottom: 12px;
+        stroke-width: 1;
+      }
+      /* 参考页做法：统一用 canvas 绘制（底图+水印叠加） */
+      #previewCanvas{
+        width: 100%;
+        height: 100%;
+        display:block;
+      }
+      #convertImg{ z-index: 1; }
+      .wmControls{
+        flex: 1;
+        background-color: var(--pure-white);
+        display:flex;
+        flex-direction: column;
+        padding-top: 15px;
+        position: relative;
+        z-index: 3;
+      }
+      .previewArea{
+        z-index: 1;
+      }
+      .categoryTabs{
+        display:flex;
+        padding: 0 20px 15px;
+        gap: 25px;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .categoryTabs::-webkit-scrollbar{ display:none; }
+      .tabItem{
+        font-size: 14px;
+        color: var(--text-sub);
+        cursor: pointer;
+        position: relative;
+        white-space: nowrap;
+        padding-bottom: 6px;
+        transition: color .25s;
+        user-select:none;
+      }
+      .tabItem.active{
+        color: var(--active-color);
+        font-weight: 500;
+      }
+      .tabItem.active::after{
+        content:'';
+        position:absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 4px;
+        height: 4px;
+        background-color: var(--active-color);
+        border-radius: 50%;
+      }
+      .effectsScroll{
+        display:flex;
+        padding: 10px 20px 20px;
+        gap: 15px;
+        overflow-x: auto;
+        scrollbar-width:none;
+        align-items:center;
+      }
+      .effectsScroll::-webkit-scrollbar{ display:none; }
+      .effectBox{
+        width: 64px;
+        height: 64px;
+        flex-shrink: 0;
+        border-radius: 12px;
+        background-color: #FAFAFA;
+        border: 1px solid var(--border-soft);
+        display:flex;
+        flex-direction: column;
+        justify-content:center;
+        align-items:center;
+        cursor: pointer;
+        transition: all .2s;
+        user-select:none;
+        overflow:hidden;
+      }
+      .effectBox.active{
+        border-color: var(--active-color);
+        background-color: var(--pure-white);
+      }
+      .effectName{
+        font-size: 11px;
+        color: var(--text-sub);
+        margin-top: 6px;
+      }
+      .effectBox.active .effectName{
+        color: var(--text-main);
+        font-weight: 500;
+      }
+      .addWmBtn{
+        border: 1px dashed #D0D0D0;
+        background-color: transparent;
+      }
+      .addWmBtn svg{
+        width: 20px;
+        height: 20px;
+        color: var(--text-sub);
+      }
+      .thumb{
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: #fff;
+        border: 1px solid var(--border-soft);
+        object-fit: contain;
+        display:none;
+      }
+      .thumb.show{ display:block; }
+      .slidersArea{
+        padding: 10px 25px 30px;
+        display:flex;
+        flex-direction: column;
+        gap: 20px;
+        margin-top: auto;
+      }
+      .sliderRow{
+        display:flex;
+        align-items:center;
+        gap: 15px;
+      }
+      .sliderRow span{
+        font-size: 12px;
+        color: var(--text-sub);
+        width: 48px;
+        flex: 0 0 auto;
+      }
+      body.route-app input[type=range]{
+        -webkit-appearance: none;
+        appearance: none;
+        flex: 1;
+        height: 1px;
+        background: #E5E5E5;
+        outline:none;
+      }
+      body.route-app input[type=range]::-webkit-slider-thumb{
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--pure-white);
+        border: 1px solid #E0E0E0;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        cursor:pointer;
+      }
+      header{
+        display:flex;
+        align-items:flex-end;
+        justify-content:space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      .brand{
+        display:flex;
+        flex-direction:column;
+        gap: 8px;
+      }
+      .title{
+        font-size: clamp(22px, 2.6vw, 30px);
+        letter-spacing: .2px;
+        line-height: 1.2;
+        margin:0;
+      }
+      .subtitle{
+        margin:0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .chip{
+        display:inline-flex;
+        align-items:center;
+        gap: 8px;
+        padding: 10px 12px;
+        border: 1px solid var(--stroke);
+        border-radius: 999px;
+        background: rgba(255,255,255,.55);
+        backdrop-filter: blur(10px);
+        box-shadow: var(--shadow2);
+        font-size: 12px;
+        color: var(--muted);
+        user-select:none;
+        white-space: nowrap;
+      }
+      .grid{
+        display:grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      @media (max-width: 720px){
+        header{ align-items:flex-start; flex-direction:column; }
+        .grid{ grid-template-columns: 1fr; }
+      }
+      .card{
+        border: 1px solid var(--stroke);
+        border-radius: var(--radius);
+        background: var(--card);
+        backdrop-filter: blur(14px);
+        box-shadow: var(--shadow);
+        padding: 18px;
+        position: relative;
+        overflow:hidden;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        cursor: pointer;
+      }
+      .card:hover{
+        transform: translateY(-2px);
+        border-color: rgba(17,24,39,.16);
+        box-shadow: 0 22px 60px rgba(17,24,39,.10);
+      }
+      .card:active{ transform: translateY(0px) scale(.995); }
+      .card:focus-within{
+        outline: 3px solid rgba(59,130,246,.18);
+        outline-offset: 2px;
+      }
+      .cardTop{
+        display:flex;
+        align-items:flex-start;
+        justify-content:space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .icon{
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        border: 1px solid rgba(17,24,39,.10);
+        background: rgba(255,255,255,.65);
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        box-shadow: 0 10px 26px rgba(17,24,39,.06);
+        flex: 0 0 auto;
+      }
+      .icon svg{ width: 22px; height: 22px; opacity: .9; }
+      .cardTitle{
+        margin:0;
+        font-size: 16px;
+        letter-spacing: .2px;
+      }
+      .cardDesc{
+        margin: 6px 0 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .ctaRow{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        margin-top: 14px;
+        gap: 12px;
+      }
+      .btn{
+        display:inline-flex;
+        align-items:center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(17,24,39,.12);
+        background: rgba(255,255,255,.7);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 10px 24px rgba(17,24,39,.06);
+        font-size: 13px;
+        color: var(--text);
+        transition: transform .18s ease, border-color .18s ease, background .18s ease;
+      }
+      .btn:hover{
+        border-color: rgba(17,24,39,.18);
+        background: rgba(255,255,255,.85);
+        transform: translateY(-1px);
+      }
+      .btn:active{ transform: translateY(0px); }
+      .hint{
+        color: var(--muted);
+        font-size: 12px;
+        user-select:none;
+      }
+      footer{
+        margin-top: 14px;
+        color: rgba(17,24,39,.45);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .hidden{ display:none !important; }
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #F5F5F7; /* 电脑端展示时的深色背景，衬托手机白框 */
-            font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            color: var(--text-main);
-        }
-
-        /* 模拟手机主界面 */
-        .app-box {
-            width: 100%;
-            max-width: 414px;
-            height: 100%;
-            max-height: 850px;
-            background-color: var(--light-bg);
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-
-        @media (min-width: 450px) {
-            .app-box {
-                height: 90vh;
-                border-radius: 24px;
-                overflow: hidden;
-                box-shadow: var(--shadow-light);
-            }
-        }
-
-        /* 极简顶栏 */
-        .header {
-            height: 50px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 20px;
-            background-color: var(--pure-white);
-            border-bottom: 1px solid var(--border-soft);
-        }
-
-        .header .btn {
-            font-size: 15px;
-            color: var(--text-main);
-            background: none;
-            border: none;
-            padding: 0;
-            cursor: pointer;
-        }
-
-        .header .btn-export {
-            color: var(--btn-blue);
-            font-weight: 500;
-        }
-
-        .header .title {
-            font-size: 16px;
-            font-weight: 600;
-            letter-spacing: 1px;
-        }
-
-        /* 主预览区（点击上传底图） */
-        .preview-area {
-            width: 100%;
-            aspect-ratio: 4 / 4.5; /* Ins经典的4:5比例 */
-            background-color: #F8F8F8;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            cursor: pointer;
-            overflow: hidden;
-        }
-
-        #preview-canvas {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            display: block;
-        }
-
-        .upload-hint {
-            position: absolute;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            color: var(--text-sub);
-            font-size: 14px;
-            letter-spacing: 1px;
-        }
-
-        .upload-hint svg {
-            width: 32px;
-            height: 32px;
-            margin-bottom: 12px;
-            stroke-width: 1;
-        }
-
-        /* 操作控制区 */
-        .controls {
-            flex: 1;
-            background-color: var(--pure-white);
-            display: flex;
-            flex-direction: column;
-            padding-top: 15px;
-        }
-
-        /* 一级分类栏 (淡淡的文字，选中有小黑点) */
-        .category-tabs {
-            display: flex;
-            padding: 0 14px 15px;
-            gap: 10px;
-            justify-content: space-between;
-            overflow-x: visible;
-            scrollbar-width: none;
-        }
-        .category-tabs::-webkit-scrollbar { display: none; }
-
-        .tab-item {
-            font-size: 13px;
-            color: var(--text-sub);
-            cursor: pointer;
-            position: relative;
-            white-space: nowrap;
-            padding-bottom: 6px;
-            transition: color 0.3s;
-            flex: 1;
-            text-align: center;
-        }
-
-        .tab-item.active {
-            color: var(--active-color);
-            font-weight: 500;
-        }
-
-        /* 选中项底部的小圆点(Ins细节) */
-        .tab-item.active::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 4px;
-            height: 4px;
-            background-color: var(--active-color);
-            border-radius: 50%;
-        }
-
-        /* 二级效果栏 (包含导入水印按钮和对应的效果图) */
-        .effects-scroll {
-            display: flex;
-            padding: 10px 20px 20px;
-            gap: 15px;
-            overflow-x: auto;
-            scrollbar-width: none;
-            align-items: center;
-        }
-        .effects-scroll::-webkit-scrollbar { display: none; }
-
-        /* 统一的效果框样式 */
-        .effect-box {
-            width: 64px;
-            height: 64px;
-            flex-shrink: 0;
-            border-radius: 12px;
-            background-color: #FAFAFA;
-            border: 1px solid var(--border-soft);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            position: relative;
-            transition: all 0.2s;
-        }
-
-        .effect-box.active {
-            border-color: var(--active-color);
-            background-color: var(--pure-white);
-        }
-
-        .effect-name {
-            font-size: 11px;
-            color: var(--text-sub);
-            margin-top: 6px;
-        }
-        
-        .effect-box.active .effect-name {
-            color: var(--text-main);
-            font-weight: 500;
-        }
-
-        /* 特殊：添加水印按钮 */
-        .add-wm-btn {
-            border: 1px dashed #D0D0D0;
-            background-color: transparent;
-        }
-        .add-wm-btn svg {
-            width: 20px;
-            height: 20px;
-            color: var(--text-sub);
-        }
-
-        /* 底部调节滑动条 */
-        .sliders-area {
-            padding: 10px 25px 30px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            margin-top: auto;
-        }
-
-        .slider-row {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .slider-row span {
-            font-size: 12px;
-            color: var(--text-sub);
-            width: 36px;
-        }
-
-        /* 极细滑动条 */
-        input[type=range] {
-            -webkit-appearance: none;
-            appearance: none;
-            flex: 1;
-            height: 1px;
-            background: #E5E5E5;
-            outline: none;
-        }
-
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: var(--pure-white);
-            border: 1px solid #E0E0E0;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-            cursor: pointer;
-        }
+      .wm{ display:block; }
+      .kbd{
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        border: 1px solid rgba(17,24,39,.14);
+        background: rgba(255,255,255,.55);
+        border-bottom-color: rgba(17,24,39,.20);
+        padding: 1px 6px;
+        border-radius: 8px;
+        color: rgba(17,24,39,.78);
+      }
+      .toast{
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        transform: translateX(-50%);
+        padding: 10px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(17,24,39,.12);
+        background: rgba(255,255,255,.78);
+        backdrop-filter: blur(12px);
+        box-shadow: 0 18px 52px rgba(17,24,39,.12);
+        color: rgba(17,24,39,.78);
+        font-size: 12px;
+        opacity: 0;
+        pointer-events:none;
+        transition: opacity .2s ease, transform .2s ease;
+      }
+      .toast.show{
+        opacity: 1;
+        transform: translateX(-50%) translateY(-2px);
+      }
+      .batchTools{
+        display:flex;
+        gap:8px;
+        flex-wrap:wrap;
+      }
+      .previewGridArea{
+        display:block;
+        padding:12px;
+        overflow:auto;
+        cursor:default;
+      }
+      .previewGridTop{
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+      }
+      .miniBtn{
+        border:1px solid var(--border-soft);
+        background:#fff;
+        border-radius:10px;
+        padding:8px 10px;
+        font-size:12px;
+        cursor:pointer;
+      }
+      .miniBtn.active{
+        border-color: var(--active-color);
+        color: var(--active-color);
+      }
+      .batchGrid{
+        display:grid;
+        gap:8px;
+        margin-top:10px;
+      }
+      .batchCard{
+        border:1px solid var(--border-soft);
+        background:#fff;
+        border-radius:10px;
+        overflow:hidden;
+        cursor:pointer;
+      }
+      .batchCard img{
+        width:100%;
+        aspect-ratio:1/1;
+        object-fit:cover;
+        display:block;
+      }
+      .batchCard p{
+        margin:0;
+        padding:6px 8px;
+        font-size:11px;
+        color:var(--text-sub);
+        white-space:nowrap;
+        overflow:hidden;
+        text-overflow:ellipsis;
+      }
+      .lightbox{
+        position:fixed;
+        inset:0;
+        background:rgba(0,0,0,.75);
+        display:none;
+        align-items:center;
+        justify-content:center;
+        z-index:1000;
+        padding:16px;
+      }
+      .lightbox.show{ display:flex; }
+      .lightbox img{
+        max-width:min(96vw, 1200px);
+        max-height:92vh;
+        object-fit:contain;
+        border-radius:8px;
+        background:#111;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="shell" role="application" aria-label="水印工具">
+        <section id="homePage">
+        <header>
+          <div class="brand">
+            <h1 class="title">水印工具</h1>
+            <p class="subtitle">白色简约 INS 风主页，选择你要做的事。</p>
+          </div>
+          <div class="chip" aria-label="快捷键提示">
+            快捷键：<span class="kbd">1</span> 打水印 / <span class="kbd">2</span> 改格式
+          </div>
+        </header>
 
-    <div class="app-box">
-        
-        <!-- 顶栏 -->
-        <div class="header">
-            <button class="btn">取消</button>
-            <div class="title">排版与水印</div>
-            <button class="btn btn-export" id="export-btn">导出</button>
-        </div>
+        <main class="grid">
+          <section class="card" tabindex="0" role="button" aria-label="一键打水印" data-action="watermark">
+            <div class="cardTop">
+              <div>
+                <h2 class="cardTitle">一键打水印</h2>
+                <p class="cardDesc">上传图片后，自动批量添加水印（位置、透明度、字号后续可配置）。</p>
+              </div>
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M7 7h10M7 12h6M7 17h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M5.5 4.8h13A1.7 1.7 0 0 1 20.2 6.5v11A1.7 1.7 0 0 1 18.5 19.2h-13A1.7 1.7 0 0 1 3.8 17.5v-11A1.7 1.7 0 0 1 5.5 4.8Z" stroke="currentColor" stroke-width="1.3" opacity=".55"/>
+                </svg>
+              </div>
+            </div>
+            <div class="ctaRow">
+              <a class="btn" href="#watermark" data-link="watermark">
+                进入
+                <span aria-hidden="true">→</span>
+              </a>
+              <span class="hint">推荐：用于图片发布前处理</span>
+            </div>
+          </section>
 
-        <!-- 巨大的沉浸式预览区 -->
-        <!-- 点击整个区域即可上传底图 -->
-        <div class="preview-area" onclick="document.getElementById('img-upload').click()">
-            <div class="upload-hint" id="upload-hint">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+          <section class="card" tabindex="0" role="button" aria-label="一键改格式" data-action="convert">
+            <div class="cardTop">
+              <div>
+                <h2 class="cardTitle">一键改格式</h2>
+                <p class="cardDesc">将图片格式快速转换（如 JPG/PNG/WebP），并支持批量下载。</p>
+              </div>
+              <div class="icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M16.5 8.2l3 3-3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M19.2 11.2H10.5a3.7 3.7 0 0 0 0 7.4H12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                  <path d="M8 15.8l-3-3 3-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+                  <path d="M5 12.8h8.5a3.7 3.7 0 0 0 0-7.4H12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>
+                </svg>
+              </div>
+            </div>
+            <div class="ctaRow">
+              <a class="btn" href="#convert" data-link="convert">
+                进入
+                <span aria-hidden="true">→</span>
+              </a>
+              <span class="hint">推荐：统一图片规格/格式</span>
+            </div>
+          </section>
+        </main>
+
+        <footer>
+          提示：先把「一键打水印」页做完整交互；「一键改格式」后续再补。
+        </footer>
+        </section>
+
+        <section id="watermarkPage" class="hidden wm" aria-label="一键打水印页面">
+          <div class="appBox">
+            <div class="wmHeader">
+              <button class="btn" id="backHome" type="button">取消</button>
+              <div class="title">排版与水印</div>
+              <button class="btn btnExport" id="exportBtn" type="button">导出</button>
+            </div>
+
+            <div class="previewArea" id="previewArea" aria-label="预览区（轻触上传底图）">
+              <div class="uploadHint" id="uploadHint">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
                 <span>轻触添加你的相片</span>
-            </div>
-            <canvas id="preview-canvas"></canvas>
-            <!-- 隐藏的底图上传 -->
-            <input type="file" id="img-upload" accept="image/*" style="display: none;">
-        </div>
-
-        <!-- 底部排版全流程 -->
-        <div class="controls">
-            
-            <!-- 1. 一级分类 -->
-            <div class="category-tabs" id="category-tabs">
-                <div class="tab-item active" data-cat="plain">普白</div>
-                <div class="tab-item" data-cat="pattern">底纹</div>
-                <div class="tab-item" data-cat="full">全屏</div>
-                <div class="tab-item" data-cat="box">水印框</div>
-                <div class="tab-item" data-cat="small">小水印</div>
+              </div>
+              <canvas id="previewCanvas"></canvas>
+              <input id="baseFile" type="file" accept="image/*" hidden />
+              <input id="wmFile" type="file" accept="image/*" hidden />
             </div>
 
-            <!-- 2. 二级效果栏 (动态切换) -->
-            <div class="effects-scroll" id="effects-scroll">
-                <!-- 隐藏的水印上传input -->
-                <input type="file" id="wm-upload" accept="image/*" style="display: none;">
-                
-                <!-- 永远在最前面的 [导入水印图] 按钮 -->
-                <div class="effect-box add-wm-btn" onclick="document.getElementById('wm-upload').click()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    <span class="effect-name" style="margin-top:4px;">加水印图</span>
+            <div class="wmControls" aria-label="控制区">
+              <div class="categoryTabs" id="categoryTabs" role="tablist" aria-label="大分类">
+                <div class="tabItem active" role="tab" aria-selected="true" data-cat="box">水印框</div>
+                <div class="tabItem" role="tab" aria-selected="false" data-cat="full">全屏</div>
+                <div class="tabItem" role="tab" aria-selected="false" data-cat="plain">普白</div>
+                <div class="tabItem" role="tab" aria-selected="false" data-cat="small">小水印</div>
+                <div class="tabItem" role="tab" aria-selected="false" data-cat="pattern">底纹</div>
+              </div>
+
+              <div class="effectsScroll" id="effectsScroll" aria-label="水印效果栏">
+                <div class="effectBox addWmBtn" id="addWmBtn" role="button" tabindex="0" aria-label="导入水印图">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span class="effectName" style="margin-top:4px;">加水印图</span>
                 </div>
 
-                <!-- 这里的子项会在JS里根据分类动态生成 -->
-                <div id="dynamic-effects" style="display: flex; gap: 15px;">
-                    <!-- 默认显示水印框的效果 -->
-                    <div class="effect-box active"><span class="effect-name">经典居中</span></div>
-                    <div class="effect-box"><span class="effect-name">拍立得边</span></div>
-                    <div class="effect-box"><span class="effect-name">留白细线</span></div>
+                <div class="effectBox active" id="currentWmBox" role="button" tabindex="0" aria-label="当前水印">
+                  <img class="thumb" id="wmThumb" alt="水印缩略图" />
+                  <span class="effectName" id="wmName">未导入</span>
                 </div>
+
+                <div class="effectBox" id="fullL2Box" role="button" tabindex="0" aria-label="全屏第2层（叠加）" style="display:none;">
+                  <span class="effectName" style="margin-top:0;">第2层</span>
+                </div>
+                <div class="effectBox" id="fullL1Box" role="button" tabindex="0" aria-label="全屏第1层（叠加）" style="display:none;">
+                  <span class="effectName" style="margin-top:0;">第1层</span>
+                </div>
+                <div class="effectBox" id="fullL3Box" role="button" tabindex="0" aria-label="全屏第3层（叠加）" style="display:none;">
+                  <span class="effectName" style="margin-top:0;">第3层</span>
+                </div>
+                <div class="effectBox" id="fullL4Box" role="button" tabindex="0" aria-label="全屏第4层（叠加）" style="display:none;">
+                  <span class="effectName" style="margin-top:0;">第4层</span>
+                </div>
+              </div>
+
+              <div class="slidersArea" aria-label="参数调节">
+                <div class="sliderRow">
+                  <span>大小</span>
+                  <input type="range" id="sizeRange" min="10" max="100" value="60" />
+                </div>
+                <div class="sliderRow">
+                  <span>透明度</span>
+                  <input type="range" id="opacityRange" min="100" max="100" value="100" disabled />
+                </div>
+                <div style="display:flex; justify-content:space-between; gap:12px;">
+                  <span style="font-size:12px; color:var(--text-sub);" id="metaTitle">未导入底图</span>
+                  <button class="btn" id="clearAllBtn" type="button" style="font-size:12px; color:var(--text-sub);">清空</button>
+                </div>
+                <div class="sliderRow" style="align-items:center;">
+                  <span>方案</span>
+                  <select id="presetSelect" style="flex:1; min-width:0; height:34px; border:1px solid var(--border-soft); border-radius:10px; padding:0 10px; background:#fff;">
+                    <option value="">未选择方案</option>
+                  </select>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn" id="savePresetBtn" type="button" style="font-size:12px;">保存方案</button>
+                  <button class="btn" id="applyPresetBtn" type="button" style="font-size:12px;">套用方案</button>
+                  <button class="btn" id="deletePresetBtn" type="button" style="font-size:12px;">删除方案</button>
+                </div>
+                <div style="margin-top:6px;">
+                  <button class="btn" id="batchWatermarkBtn" type="button" style="font-size:12px; width:100%;">一键批量打水印</button>
+                </div>
+                <div style="margin-top:6px;">
+                  <button class="btn" id="nextStepBtn" type="button" style="font-size:12px; width:100%;">下一步：一键批量套预览</button>
+                </div>
+                <input id="batchBaseFiles" type="file" accept="image/*" multiple hidden />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="previewStepPage" class="hidden wm" aria-label="批量套预览页面">
+          <div class="appBox">
+            <div class="wmHeader">
+              <button class="btn" id="backToWatermark" type="button">返回</button>
+              <div class="title">批量套预览</div>
+              <button class="btn btnExport" id="applyPreviewBatchBtn" type="button">一键套预览</button>
             </div>
 
-            <!-- 3. 滑动参数调节 -->
-            <div class="sliders-area">
-                <div class="slider-row">
-                    <span>大小</span>
-                    <input type="range" id="size-slider" min="10" max="100" value="100">
+            <div class="previewArea previewGridArea" id="previewStepArea" aria-label="批量预览">
+              <div class="previewGridTop">
+                <span id="batchStatusText" style="font-size:13px; color:var(--text-main);">当前已批量打水印：0 张</span>
+                <span style="font-size:12px; color:var(--text-sub);">先在上一步完成“批量打水印”，再在这里导入预览框与黑区蒙版。</span>
+                <div class="batchTools">
+                  <button class="miniBtn active" id="sourceWatermarkedBtn" type="button">看已打水印</button>
+                  <button class="miniBtn" id="sourcePreviewedBtn" type="button">看套预览</button>
+                  <button class="miniBtn active" id="grid9Btn" type="button">9宫格</button>
+                  <button class="miniBtn" id="grid12Btn" type="button">12宫格</button>
+                  <button class="miniBtn" id="grid100Btn" type="button">100宫格</button>
                 </div>
-                <div class="slider-row">
-                    <span>透明度</span>
-                    <input type="range" id="opacity-slider" min="10" max="100" value="100">
-                </div>
+              </div>
+              <div id="batchGrid" class="batchGrid" aria-label="批量预览宫格"></div>
             </div>
 
-        </div>
+            <div class="wmControls" aria-label="预览叠加配置">
+              <div class="effectsScroll">
+                <div class="effectBox" id="frameBtn" role="button" tabindex="0">
+                  <span class="effectName" style="margin-top:0;">导入预览框</span>
+                </div>
+                <div class="effectBox" id="maskBtn" role="button" tabindex="0">
+                  <span class="effectName" style="margin-top:0;">导入黑区蒙版</span>
+                </div>
+              </div>
+              <div class="slidersArea">
+                <div style="display:flex; gap:8px;">
+                  <button class="btn" id="downloadWatermarkedBtn" type="button" style="font-size:12px;">下载已打水印批次</button>
+                  <button class="btn" id="downloadPreviewedBtn" type="button" style="font-size:12px;">下载套预览批次</button>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button class="btn" id="markBatchBtn" type="button" style="font-size:12px;">一键标记</button>
+                  <button class="btn" id="saveAlbumBtn" type="button" style="font-size:12px;">一键保存到相册</button>
+                </div>
+                <input id="frameFile" type="file" accept="image/*" hidden />
+                <input id="maskFile" type="file" accept="image/*" hidden />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="convertPage" class="hidden wm" aria-label="一键改格式页面">
+          <div class="appBox">
+            <div class="wmHeader">
+              <button class="btn" id="backHome2" type="button">取消</button>
+              <div class="title">一键改格式</div>
+              <button class="btn btnExport" id="exportBtn2" type="button">导出</button>
+            </div>
+
+            <div class="previewArea" id="convertPreviewArea" aria-label="预览区（轻触上传图片）">
+              <div class="uploadHint" id="convertUploadHint">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <span>轻触添加你的相片</span>
+              </div>
+              <div class="previewStack" aria-hidden="true">
+                <img id="convertImg" alt="图片预览" />
+              </div>
+              <input id="convertFile" type="file" accept="image/*" hidden />
+            </div>
+
+            <div class="wmControls" aria-label="控制区">
+              <div class="categoryTabs" role="tablist" aria-label="目标格式">
+                <div class="tabItem active" role="tab" aria-selected="true" data-format="jpg">JPG</div>
+                <div class="tabItem" role="tab" aria-selected="false" data-format="png">PNG</div>
+                <div class="tabItem" role="tab" aria-selected="false" data-format="webp">WebP</div>
+              </div>
+
+              <div class="effectsScroll" aria-label="说明">
+                <div class="effectBox active" style="width:auto; padding:0 14px;">
+                  <span class="effectName" style="margin-top:0;">这里先做占位：下一步实现“转换并下载”</span>
+                </div>
+              </div>
+
+              <div class="slidersArea" aria-label="操作">
+                <div style="display:flex; justify-content:space-between; gap:12px;">
+                  <span style="font-size:12px; color:var(--text-sub);" id="convertMeta">未导入图片</span>
+                  <button class="btn" id="convertClearBtn" type="button" style="font-size:12px; color:var(--text-sub);">清空</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div id="lightbox" class="lightbox" aria-label="放大预览">
+      <img id="lightboxImg" alt="放大图" />
     </div>
 
     <script>
-        // 不同分类对应的效果项
-        const effectOptions = {
-            'plain': ['普通'],
-            'pattern': ['叠加', '柔光叠加', '柔光'],
-            'full': ['叠加', '柔光叠加', '柔光'],
-            'box': ['水印体验卡', '经典居中', '拍立得边'],
-            'small': ['普通', '水印体验卡']
-        };
+      const toast = document.getElementById("toast");
+      let toastTimer = null;
+      const homePage = document.getElementById("homePage");
+      const watermarkPage = document.getElementById("watermarkPage");
+      const previewStepPage = document.getElementById("previewStepPage");
+      const convertPage = document.getElementById("convertPage");
+      const backHome = document.getElementById("backHome");
+      const exportBtn = document.getElementById("exportBtn");
+      const previewArea = document.getElementById("previewArea");
+      const uploadHint = document.getElementById("uploadHint");
+      const backHome2 = document.getElementById("backHome2");
+      const exportBtn2 = document.getElementById("exportBtn2");
+      const convertPreviewArea = document.getElementById("convertPreviewArea");
+      const convertUploadHint = document.getElementById("convertUploadHint");
+      const convertFile = document.getElementById("convertFile");
+      const convertImg = document.getElementById("convertImg");
+      const convertMeta = document.getElementById("convertMeta");
+      const convertClearBtn = document.getElementById("convertClearBtn");
 
-        const STORAGE_KEY = 'dwxie';
-        const state = {
-            activeCategory: 'plain',
-            activeEffect: '普通',
-            baseImage: null,
-            watermarkImage: null,
-            baseImageDataUrl: '',
-            watermarkImageDataUrl: '',
-            sizePercent: 100,
-            opacityPercent: 100,
-            repeatFill: true,
-            layerConfigs: {
-                plain: { effect: '普通', sizePercent: 100, opacityPercent: 100, repeatFill: true }
+      const baseFile = document.getElementById("baseFile");
+      const wmFile = document.getElementById("wmFile");
+      const frameFile = document.getElementById("frameFile");
+      const maskFile = document.getElementById("maskFile");
+      const previewCanvas = document.getElementById("previewCanvas");
+      const previewCtx = previewCanvas ? previewCanvas.getContext("2d") : null;
+      const metaTitle = document.getElementById("metaTitle");
+      const clearAllBtn = document.getElementById("clearAllBtn");
+      const opacityRange = document.getElementById("opacityRange");
+      const sizeRange = document.getElementById("sizeRange");
+      const categoryTabs = document.getElementById("categoryTabs");
+      const addWmBtn = document.getElementById("addWmBtn");
+      const currentWmBox = document.getElementById("currentWmBox");
+      const wmThumb = document.getElementById("wmThumb");
+      const wmName = document.getElementById("wmName");
+      const fullL2Box = document.getElementById("fullL2Box");
+      const fullL1Box = document.getElementById("fullL1Box");
+      const fullL3Box = document.getElementById("fullL3Box");
+      const fullL4Box = document.getElementById("fullL4Box");
+      const presetSelect = document.getElementById("presetSelect");
+      const savePresetBtn = document.getElementById("savePresetBtn");
+      const applyPresetBtn = document.getElementById("applyPresetBtn");
+      const deletePresetBtn = document.getElementById("deletePresetBtn");
+      const nextStepBtn = document.getElementById("nextStepBtn");
+      const batchWatermarkBtn = document.getElementById("batchWatermarkBtn");
+      const batchBaseFiles = document.getElementById("batchBaseFiles");
+      const backToWatermark = document.getElementById("backToWatermark");
+      const applyPreviewBatchBtn = document.getElementById("applyPreviewBatchBtn");
+      const batchStatusText = document.getElementById("batchStatusText");
+      const frameBtn = document.getElementById("frameBtn");
+      const maskBtn = document.getElementById("maskBtn");
+      const downloadWatermarkedBtn = document.getElementById("downloadWatermarkedBtn");
+      const downloadPreviewedBtn = document.getElementById("downloadPreviewedBtn");
+      const markBatchBtn = document.getElementById("markBatchBtn");
+      const saveAlbumBtn = document.getElementById("saveAlbumBtn");
+      const sourceWatermarkedBtn = document.getElementById("sourceWatermarkedBtn");
+      const sourcePreviewedBtn = document.getElementById("sourcePreviewedBtn");
+      const grid9Btn = document.getElementById("grid9Btn");
+      const grid12Btn = document.getElementById("grid12Btn");
+      const grid100Btn = document.getElementById("grid100Btn");
+      const batchGrid = document.getElementById("batchGrid");
+      const lightbox = document.getElementById("lightbox");
+      const lightboxImg = document.getElementById("lightboxImg");
+
+      const wmState = {
+        cat: "box",
+        fullPick: 1, // 全屏导入目标层：1/2/3/4
+        baseName: "",
+        baseUrl: "",
+        watermark: {
+          box: { name: "", url: "", data: "" },
+          full: { name: "", url: "", data: "" },
+          plain: { name: "", url: "", data: "" },
+          small: { name: "", url: "", data: "" },
+          pattern: { name: "", url: "", data: "" },
+        },
+        fullLayers: {
+          1: { name: "", url: "", data: "" },
+          2: { name: "", url: "", data: "" },
+          3: { name: "", url: "", data: "" },
+          4: { name: "", url: "", data: "" },
+        },
+        frame: { name: "", url: "", data: "" },
+        alignMask: { name: "", url: "", data: "" },
+        opacity: 1,
+        size: 0.60,
+      };
+
+      const imgState = {
+        base: null,
+        watermark: {
+          box: null,
+          full: null,
+          plain: null,
+          small: null,
+          pattern: null,
+        },
+        fullLayers: {
+          1: null,
+          2: null,
+          3: null,
+          4: null,
+        },
+        frame: null,
+        alignMask: null,
+      };
+      const batchState = {
+        watermarked: [], // {name,dataUrl}
+        previewed: [], // {name,dataUrl}
+        viewSource: "watermarked",
+        gridSize: 9,
+      };
+
+      // 方案存储（IndexedDB）
+      const PRESET_DB = "watermark_presets_db";
+      const PRESET_STORE = "presets";
+      let presetDb = null;
+
+      function openPresetDb(){
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open(PRESET_DB, 1);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(PRESET_STORE)) {
+              db.createObjectStore(PRESET_STORE, { keyPath: "id" });
             }
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error || new Error("open preset db failed"));
+        });
+      }
+
+      function txStore(mode){
+        if (!presetDb) throw new Error("db not ready");
+        return presetDb.transaction(PRESET_STORE, mode).objectStore(PRESET_STORE);
+      }
+
+      function idOfPreset(name){
+        return String(name || "").trim();
+      }
+
+      function getAllPresets(){
+        return new Promise((resolve, reject) => {
+          const req = txStore("readonly").getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => reject(req.error || new Error("getAll failed"));
+        });
+      }
+
+      function savePresetDoc(doc){
+        return new Promise((resolve, reject) => {
+          const req = txStore("readwrite").put(doc);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error || new Error("save preset failed"));
+        });
+      }
+
+      function getPresetDoc(id){
+        return new Promise((resolve, reject) => {
+          const req = txStore("readonly").get(id);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error || new Error("get preset failed"));
+        });
+      }
+
+      function deletePresetDoc(id){
+        return new Promise((resolve, reject) => {
+          const req = txStore("readwrite").delete(id);
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error || new Error("delete preset failed"));
+        });
+      }
+
+      async function refreshPresetSelect(selectedId = ""){
+        if (!presetSelect || !presetDb) return;
+        const all = await getAllPresets();
+        all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+        presetSelect.innerHTML = `<option value="">未选择方案</option>`;
+        all.forEach((p) => {
+          const op = document.createElement("option");
+          op.value = p.id;
+          op.textContent = p.name;
+          presetSelect.appendChild(op);
+        });
+        if (selectedId) presetSelect.value = selectedId;
+      }
+
+      function readFileAsDataURL(file){
+        return new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result || ""));
+          fr.onerror = () => reject(fr.error || new Error("read file failed"));
+          fr.readAsDataURL(file);
+        });
+      }
+
+      function clonePresetPayload(){
+        return {
+          size: wmState.size,
+          watermark: {
+            box: { name: wmState.watermark.box.name, data: wmState.watermark.box.data || "" },
+            plain: { name: wmState.watermark.plain.name, data: wmState.watermark.plain.data || "" },
+            small: { name: wmState.watermark.small.name, data: wmState.watermark.small.data || "" },
+            pattern: { name: wmState.watermark.pattern.name, data: wmState.watermark.pattern.data || "" },
+          },
+          fullLayers: {
+            1: { name: wmState.fullLayers[1].name, data: wmState.fullLayers[1].data || "" },
+            2: { name: wmState.fullLayers[2].name, data: wmState.fullLayers[2].data || "" },
+            3: { name: wmState.fullLayers[3].name, data: wmState.fullLayers[3].data || "" },
+            4: { name: wmState.fullLayers[4].name, data: wmState.fullLayers[4].data || "" },
+          },
+          frame: { name: wmState.frame.name, data: wmState.frame.data || "" },
+          alignMask: { name: wmState.alignMask.name, data: wmState.alignMask.data || "" },
         };
+      }
 
-        const TEXTURE_URL = 'https://img.heliar.top/file/1776105857230_IMG_5465.jpeg';
-        const tabs = document.querySelectorAll('.tab-item');
-        const dynamicEffectsContainer = document.getElementById('dynamic-effects');
-        const imgUpload = document.getElementById('img-upload');
-        const wmUpload = document.getElementById('wm-upload');
-        const sizeSlider = document.getElementById('size-slider');
-        const opacitySlider = document.getElementById('opacity-slider');
-        const exportBtn = document.getElementById('export-btn');
-        const canvas = document.getElementById('preview-canvas');
-        const ctx = canvas.getContext('2d');
-        const hint = document.getElementById('upload-hint');
+      function loadImageFromUrl(url){
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("image load failed"));
+          img.src = url;
+        });
+      }
 
-        let textureImagePromise = null;
+      async function applyPresetPayload(payload){
+        wmState.size = Number(payload.size) > 0 ? Number(payload.size) : wmState.size;
+        if (sizeRange) sizeRange.value = String(Math.round(wmState.size * 100));
 
-        function loadTextureImage() {
-            if (!textureImagePromise) {
-                textureImagePromise = new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    img.onload = () => resolve(img);
-                    img.onerror = reject;
-                    img.src = TEXTURE_URL;
-                });
-            }
-            return textureImagePromise;
+        const commonCats = ["box", "plain", "small", "pattern"];
+        for (const cat of commonCats) {
+          const src = payload.watermark && payload.watermark[cat] ? payload.watermark[cat] : null;
+          revokeUrl(wmState.watermark[cat].url);
+          wmState.watermark[cat].name = src && src.name ? src.name : "";
+          wmState.watermark[cat].data = src && src.data ? src.data : "";
+          wmState.watermark[cat].url = wmState.watermark[cat].data || "";
+          imgState.watermark[cat] = null;
+          if (wmState.watermark[cat].url) {
+            try { imgState.watermark[cat] = await loadImageFromUrl(wmState.watermark[cat].url); } catch {}
+          }
         }
 
-        function createLayerCanvas() {
-            const layer = document.createElement('canvas');
-            layer.width = canvas.width;
-            layer.height = canvas.height;
-            return layer;
+        for (const n of [1,2,3,4]) {
+          const src = payload.fullLayers && payload.fullLayers[n] ? payload.fullLayers[n] : null;
+          revokeUrl(wmState.fullLayers[n].url);
+          wmState.fullLayers[n].name = src && src.name ? src.name : "";
+          wmState.fullLayers[n].data = src && src.data ? src.data : "";
+          wmState.fullLayers[n].url = wmState.fullLayers[n].data || "";
+          imgState.fullLayers[n] = null;
+          if (wmState.fullLayers[n].url) {
+            try { imgState.fullLayers[n] = await loadImageFromUrl(wmState.fullLayers[n].url); } catch {}
+          }
         }
 
-        function saveActiveLayerConfig() {
-            state.layerConfigs[state.activeCategory] = {
-                effect: state.activeEffect,
-                sizePercent: state.sizePercent,
-                opacityPercent: state.opacityPercent,
-                repeatFill: state.repeatFill
-            };
+        // 预览框
+        revokeUrl(wmState.frame.url);
+        wmState.frame.name = payload.frame && payload.frame.name ? payload.frame.name : "";
+        wmState.frame.data = payload.frame && payload.frame.data ? payload.frame.data : "";
+        wmState.frame.url = wmState.frame.data || "";
+        imgState.frame = null;
+        if (wmState.frame.url) {
+          try { imgState.frame = await loadImageFromUrl(wmState.frame.url); } catch {}
         }
 
-        function loadLayerConfig(cat) {
-            const cfg = state.layerConfigs[cat];
-            if (!cfg) return false;
-            state.activeEffect = cfg.effect || state.activeEffect;
-            state.sizePercent = Number(cfg.sizePercent || state.sizePercent);
-            state.opacityPercent = Number(cfg.opacityPercent || state.opacityPercent);
-            state.repeatFill = Boolean(cfg.repeatFill);
-            sizeSlider.value = String(state.sizePercent);
-            opacitySlider.value = String(state.opacityPercent);
-            return true;
+        // 黑区蒙版
+        revokeUrl(wmState.alignMask.url);
+        wmState.alignMask.name = payload.alignMask && payload.alignMask.name ? payload.alignMask.name : "";
+        wmState.alignMask.data = payload.alignMask && payload.alignMask.data ? payload.alignMask.data : "";
+        wmState.alignMask.url = wmState.alignMask.data || "";
+        imgState.alignMask = null;
+        if (wmState.alignMask.url) {
+          try { imgState.alignMask = await loadImageFromUrl(wmState.alignMask.url); } catch {}
+        }
+      }
+
+
+      function showToast(text){
+        if (!toast) return;
+        toast.textContent = text;
+        toast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 1600);
+      }
+
+      function revokeUrl(url){
+        if (!url) return;
+        if (!String(url).startsWith("blob:")) return;
+        try{ URL.revokeObjectURL(url); } catch {}
+      }
+
+      function currentWm(){
+        if (wmState.cat === "full") {
+          return wmState.fullLayers[wmState.fullPick];
+        }
+        return wmState.watermark[wmState.cat];
+      }
+
+      function typeOfCat(cat){
+        // 叠加方式（用于预览行为）
+        if (cat === "small") return "small";
+        if (cat === "full") return "full";
+        if (cat === "box") return "box";
+        if (cat === "pattern") return "overlay";
+        return "texture"; // plain
+      }
+
+      function labelOfCat(cat){
+        if (cat === "box") return "水印框";
+        if (cat === "full") return "全屏";
+        if (cat === "plain") return "普白";
+        if (cat === "small") return "小水印";
+        if (cat === "pattern") return "底纹";
+        return cat;
+      }
+
+      function updateStage(){
+        const hasBase = Boolean(wmState.baseUrl);
+        uploadHint.style.display = hasBase ? "none" : "flex";
+
+        const wm = currentWm();
+        const hasWm = Boolean(wm.url);
+        drawPreview();
+
+        // meta + thumb
+        metaTitle.textContent = hasBase ? `${wmState.baseName}（${labelOfCat(wmState.cat)}）` : `未导入底图（${labelOfCat(wmState.cat)}）`;
+        clearAllBtn.style.visibility = (hasBase || hasWm) ? "visible" : "hidden";
+        if (hasWm) {
+          if (wmThumb) {
+            wmThumb.src = wm.url;
+            wmThumb.classList.add("show");
+          }
+          if (wmName) wmName.textContent = "已导入";
+        } else {
+          if (wmThumb) {
+            wmThumb.classList.remove("show");
+            wmThumb.removeAttribute("src");
+          }
+          if (wmName) wmName.textContent = "未导入";
         }
 
-        function saveState() {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                    activeCategory: state.activeCategory,
-                    activeEffect: state.activeEffect,
-                    sizePercent: state.sizePercent,
-                    opacityPercent: state.opacityPercent,
-                    repeatFill: state.repeatFill,
-                    layerConfigs: state.layerConfigs,
-                    baseImageDataUrl: state.baseImageDataUrl || '',
-                    watermarkImageDataUrl: state.watermarkImageDataUrl || ''
-                }));
-            } catch (_) {}
-        }
+        // 全屏层 UI 状态
+        const onFull = wmState.cat === "full";
+        if (fullL1Box) fullL1Box.style.display = onFull ? "" : "none";
+        if (fullL2Box) fullL2Box.style.display = onFull ? "" : "none";
+        if (fullL3Box) fullL3Box.style.display = onFull ? "" : "none";
+        if (fullL4Box) fullL4Box.style.display = onFull ? "" : "none";
+        if (currentWmBox) currentWmBox.style.display = onFull ? "none" : "";
+        if (addWmBtn) addWmBtn.querySelector(".effectName").textContent = onFull ? "导入(1-4层)" : "加水印图";
 
-        function loadImageFromDataUrl(dataUrl) {
-            return new Promise((resolve, reject) => {
-                if (!dataUrl) return resolve(null);
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.onerror = reject;
-                img.src = dataUrl;
+        if (onFull) {
+          const has1 = Boolean(wmState.fullLayers[1].url);
+          const has2 = Boolean(wmState.fullLayers[2].url);
+          const has3 = Boolean(wmState.fullLayers[3].url);
+          const has4 = Boolean(wmState.fullLayers[4].url);
+          if (fullL1Box) fullL1Box.classList.toggle("active", wmState.fullPick === 1);
+          if (fullL2Box) fullL2Box.classList.toggle("active", wmState.fullPick === 2);
+          if (fullL3Box) fullL3Box.classList.toggle("active", wmState.fullPick === 3);
+          if (fullL4Box) fullL4Box.classList.toggle("active", wmState.fullPick === 4);
+          if (fullL1Box) fullL1Box.querySelector(".effectName").textContent = has1 ? "第1层✓" : "第1层";
+          if (fullL2Box) fullL2Box.querySelector(".effectName").textContent = has2 ? "第2层✓" : "第2层";
+          if (fullL3Box) fullL3Box.querySelector(".effectName").textContent = has3 ? "第3层✓" : "第3层";
+          if (fullL4Box) fullL4Box.querySelector(".effectName").textContent = has4 ? "第4层✓" : "第4层";
+        }
+      }
+
+      function resizeCanvasToContainer(){
+        if (!previewCanvas || !previewArea) return;
+        const rect = previewArea.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const w = Math.max(1, Math.round(rect.width * dpr));
+        const h = Math.max(1, Math.round(rect.height * dpr));
+        if (previewCanvas.width !== w || previewCanvas.height !== h) {
+          previewCanvas.width = w;
+          previewCanvas.height = h;
+        }
+      }
+
+      function clearCanvas(){
+        if (!previewCtx || !previewCanvas) return;
+        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+        // 轻微灰底，接近参考页
+        previewCtx.fillStyle = "#F8F8F8";
+        previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+      }
+
+      function drawContain(ctx, img, x, y, w, h){
+        const iw = img.naturalWidth || img.width;
+        const ih = img.naturalHeight || img.height;
+        if (!iw || !ih) return { dx: x, dy: y, dw: w, dh: h };
+        const s = Math.min(w / iw, h / ih);
+        const dw = iw * s;
+        const dh = ih * s;
+        const dx = x + (w - dw) / 2;
+        const dy = y + (h - dh) / 2;
+        ctx.drawImage(img, dx, dy, dw, dh);
+        return { dx, dy, dw, dh };
+      }
+
+      function makeOffscreen(w, h){
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w));
+        c.height = Math.max(1, Math.round(h));
+        return c;
+      }
+
+      function downloadDataUrl(filename, dataUrl){
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      async function markBatchWithNumbers(list){
+        const out = [];
+        for (let i = 0; i < list.length; i++) {
+          const it = list[i];
+          try {
+            const img = await loadImageFromUrl(it.dataUrl);
+            const w = img.naturalWidth || img.width;
+            const h = img.naturalHeight || img.height;
+            const c = makeOffscreen(w, h);
+            const ctx = c.getContext("2d");
+            if (!ctx) continue;
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const num = String(i + 1);
+            const pad = Math.max(12, Math.round(Math.min(w, h) * 0.02));
+            const fontSize = Math.max(28, Math.round(Math.min(w, h) * 0.06));
+            ctx.font = `700 ${fontSize}px -apple-system, "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
+            ctx.textBaseline = "top";
+            ctx.lineJoin = "round";
+            ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.16));
+            ctx.strokeStyle = "rgba(0,0,0,0.55)";
+            ctx.fillStyle = "#ffffff";
+            ctx.strokeText(num, pad, pad);
+            ctx.fillText(num, pad, pad);
+
+            out.push({
+              name: it.name.replace(/(\.[a-zA-Z0-9]+)?$/, "") + "_marked.png",
+              dataUrl: c.toDataURL("image/png"),
             });
+          } catch {}
         }
+        return out;
+      }
 
-        async function restoreState() {
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) return;
-                const saved = JSON.parse(raw);
+      function composeOnCanvas(targetCanvas, baseImg){
+        const ctx = targetCanvas.getContext("2d");
+        if (!ctx) return;
+        const w = targetCanvas.width;
+        const h = targetCanvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = "#F8F8F8";
+        ctx.fillRect(0, 0, w, h);
+        const baseRect = drawContain(ctx, baseImg, 0, 0, w, h);
 
-                state.activeCategory = saved.activeCategory || state.activeCategory;
-                state.activeEffect = saved.activeEffect || state.activeEffect;
-                state.sizePercent = Number(saved.sizePercent || state.sizePercent);
-                state.opacityPercent = Number(saved.opacityPercent || state.opacityPercent);
-                state.repeatFill = Boolean(saved.repeatFill);
-                state.layerConfigs = saved.layerConfigs || state.layerConfigs;
-                state.baseImageDataUrl = saved.baseImageDataUrl || '';
-                state.watermarkImageDataUrl = saved.watermarkImageDataUrl || '';
-
-                tabs.forEach(t => t.classList.toggle('active', t.getAttribute('data-cat') === state.activeCategory));
-                loadLayerConfig(state.activeCategory);
-                renderEffectList(state.activeCategory);
-
-                if (state.baseImageDataUrl) {
-                    const base = await loadImageFromDataUrl(state.baseImageDataUrl);
-                    if (base) {
-                        state.baseImage = base;
-                        hint.style.display = 'none';
-                        canvas.width = base.width;
-                        canvas.height = base.height;
-                    }
-                }
-
-                if (state.watermarkImageDataUrl) {
-                    const wm = await loadImageFromDataUrl(state.watermarkImageDataUrl);
-                    if (wm) state.watermarkImage = wm;
-                }
-
-                if (state.baseImage) {
-                    await renderPreview();
-                }
-            } catch (_) {}
+        const acc = makeOffscreen(w, h);
+        const actx = acc.getContext("2d");
+        if (!actx) return;
+        actx.drawImage(targetCanvas, 0, 0);
+        function overlayBlendIntoAcc(topImg){
+          if (!topImg) return;
+          const topLayer = makeOffscreen(w, h);
+          const tctx = topLayer.getContext("2d");
+          if (!tctx) return;
+          drawContain(tctx, topImg, 0, 0, w, h);
+          const baseId = actx.getImageData(0, 0, w, h);
+          const topId = tctx.getImageData(0, 0, w, h);
+          const bd = baseId.data;
+          const td = topId.data;
+          for (let i = 0; i < bd.length; i += 4) {
+            const ta = td[i + 3] / 255;
+            if (ta <= 0) continue;
+            const br = bd[i], bg = bd[i + 1], bb = bd[i + 2];
+            const tr = td[i], tg = td[i + 1], tb = td[i + 2];
+            const or = br < 128 ? (2 * br * tr) / 255 : 255 - (2 * (255 - br) * (255 - tr)) / 255;
+            const og = bg < 128 ? (2 * bg * tg) / 255 : 255 - (2 * (255 - bg) * (255 - tg)) / 255;
+            const ob = bb < 128 ? (2 * bb * tb) / 255 : 255 - (2 * (255 - bb) * (255 - tb)) / 255;
+            bd[i] = Math.round(or * ta + br * (1 - ta));
+            bd[i + 1] = Math.round(og * ta + bg * (1 - ta));
+            bd[i + 2] = Math.round(ob * ta + bb * (1 - ta));
+          }
+          actx.putImageData(baseId, 0, 0);
         }
+        overlayBlendIntoAcc(imgState.watermark.pattern);
+        overlayBlendIntoAcc(imgState.fullLayers[1]);
+        overlayBlendIntoAcc(imgState.fullLayers[2]);
+        overlayBlendIntoAcc(imgState.fullLayers[3]);
+        overlayBlendIntoAcc(imgState.fullLayers[4]);
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(acc, 0, 0);
 
-        function drawBase() {
-            if (!state.baseImage) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(state.baseImage, 0, 0, canvas.width, canvas.height);
-        }
-
-        function drawDefaultWatermark(category, config) {
-            if (!state.baseImage || !state.watermarkImage) return;
-
-            const wm = state.watermarkImage;
-            const baseW = canvas.width;
-            const baseH = canvas.height;
-            const ratio = wm.height / wm.width || 1;
-
-            let targetW;
-            let targetH;
-
-            if (category === 'small') {
-                targetW = baseW * Math.max(0.06, config.sizePercent / 260);
-                targetH = targetW * ratio;
-            } else {
-                targetW = baseW * Math.max(0.1, config.sizePercent / 100);
-                targetH = targetW * ratio;
-            }
-
-            const x = (baseW - targetW) / 2;
-            const y = (baseH - targetH) / 2;
-
-            let blendMode = 'source-over';
-            let blendPass = 1;
-            if (category === 'full' || category === 'pattern') {
-                if (config.effect === '叠加') { blendMode = 'overlay'; blendPass = 1; }
-                if (config.effect === '柔光叠加') { blendMode = 'soft-light'; blendPass = 2; }
-                if (config.effect === '柔光') { blendMode = 'soft-light'; blendPass = 1; }
-            }
-
-            const layer = createLayerCanvas();
-            const lctx = layer.getContext('2d');
-
-            if (config.repeatFill) {
-                const tileW = Math.max(1, Math.floor(targetW));
-                const tileH = Math.max(1, Math.floor(targetH));
-                const temp = document.createElement('canvas');
-                temp.width = tileW;
-                temp.height = tileH;
-                temp.getContext('2d').drawImage(wm, 0, 0, tileW, tileH);
-                const pattern = lctx.createPattern(temp, 'repeat');
-                lctx.fillStyle = pattern;
-                lctx.fillRect(0, 0, baseW, baseH);
-            } else {
-                lctx.drawImage(wm, x, y, targetW, targetH);
-            }
-
+        const t = typeOfCat(wmState.cat);
+        if (wmState.cat !== "full" && wmState.cat !== "pattern") {
+          const wm = imgState.watermark[wmState.cat];
+          if (wm) {
             ctx.save();
-            ctx.globalCompositeOperation = blendMode;
-            for (let i = 0; i < blendPass; i++) {
-                ctx.globalAlpha = (config.opacityPercent / 100) / blendPass;
-                ctx.drawImage(layer, 0, 0);
+            if (t === "small") {
+              const pct = 0.18 + wmState.size * 0.22;
+              const size = Math.min(baseRect.dw, baseRect.dh) * pct;
+              const pad = Math.round(Math.min(w, h) * 0.03);
+              const dx = baseRect.dx + baseRect.dw - size - pad;
+              const dy = baseRect.dy + baseRect.dh - size - pad;
+              drawContain(ctx, wm, dx, dy, size, size);
+            } else {
+              const scale = 0.75 + wmState.size * 0.6;
+              const rw = baseRect.dw * scale;
+              const rh = baseRect.dh * scale;
+              const dx = (w - rw) / 2;
+              const dy = (h - rh) / 2;
+              drawContain(ctx, wm, dx, dy, rw, rh);
             }
             ctx.restore();
-            ctx.globalCompositeOperation = 'source-over';
+          }
+        }
+      }
+
+      function applyPreviewFrameAndMaskOnCanvas(canvas){
+        const w = canvas.width;
+        const h = canvas.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        if (imgState.alignMask) {
+          const region = detectBlackRegion(imgState.alignMask, w, h);
+          if (region) {
+            const src = makeOffscreen(w, h);
+            const sctx = src.getContext("2d");
+            if (sctx) {
+              sctx.drawImage(canvas, 0, 0);
+              ctx.clearRect(0, 0, w, h);
+              drawContain(ctx, src, region.x, region.y, region.w, region.h);
+              ctx.save();
+              ctx.globalCompositeOperation = "destination-in";
+              ctx.drawImage(region.maskCanvas, 0, 0);
+              ctx.restore();
+            }
+          }
+        }
+        if (imgState.frame) {
+          ctx.save();
+          drawContain(ctx, imgState.frame, 0, 0, w, h);
+          ctx.restore();
+        }
+      }
+
+      function updateBatchToolStates(){
+        if (sourceWatermarkedBtn) sourceWatermarkedBtn.classList.toggle("active", batchState.viewSource === "watermarked");
+        if (sourcePreviewedBtn) sourcePreviewedBtn.classList.toggle("active", batchState.viewSource === "previewed");
+        if (grid9Btn) grid9Btn.classList.toggle("active", batchState.gridSize === 9);
+        if (grid12Btn) grid12Btn.classList.toggle("active", batchState.gridSize === 12);
+        if (grid100Btn) grid100Btn.classList.toggle("active", batchState.gridSize === 100);
+      }
+
+      function renderBatchGrid(){
+        if (!batchGrid) return;
+        updateBatchToolStates();
+        const list = batchState.viewSource === "previewed" ? batchState.previewed : batchState.watermarked;
+        batchGrid.innerHTML = "";
+        if (!list.length) {
+          batchGrid.style.gridTemplateColumns = "1fr";
+          const empty = document.createElement("div");
+          empty.className = "batchCard";
+          empty.innerHTML = `<p>当前没有可预览的批次，请先执行对应批量操作。</p>`;
+          batchGrid.appendChild(empty);
+          return;
         }
 
-        async function drawExperienceCardEffect(category, config) {
-            if (!state.baseImage || !state.watermarkImage) return;
+        const cols = batchState.gridSize === 9 ? 3 : (batchState.gridSize === 12 ? 4 : 10);
+        const maxCount = batchState.gridSize;
+        batchGrid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+        list.slice(0, maxCount).forEach((it) => {
+          const card = document.createElement("div");
+          card.className = "batchCard";
+          card.innerHTML = `<img src="${it.dataUrl}" alt="${it.name}"/><p title="${it.name}">${it.name}</p>`;
+          card.addEventListener("click", () => {
+            if (!lightbox || !lightboxImg) return;
+            lightboxImg.src = it.dataUrl;
+            lightbox.classList.add("show");
+          });
+          batchGrid.appendChild(card);
+        });
+      }
 
-            const baseW = canvas.width;
-            const baseH = canvas.height;
-            const wm = state.watermarkImage;
-            const alpha = config.opacityPercent / 100;
-            const wmScale = Math.max(0.1, config.sizePercent / 100);
-            let targetW = baseW * wmScale;
-            // 小水印分类下体验卡走更小范围
-            if (category === 'small') {
-                targetW = baseW * Math.max(0.06, config.sizePercent / 260);
-            }
-            const targetH = targetW * ((wm.height / wm.width) || 1);
-            const x = (baseW - targetW) / 2;
-            const y = (baseH - targetH) / 2;
+      function detectBlackRegion(maskImg, outW, outH){
+        // 从“透明底黑图”里找到黑色有效区域边界
+        const c = makeOffscreen(outW, outH);
+        const ctx = c.getContext("2d");
+        if (!ctx) return null;
+        drawContain(ctx, maskImg, 0, 0, outW, outH);
+        const id = ctx.getImageData(0, 0, outW, outH);
+        const d = id.data;
+        let minX = outW, minY = outH, maxX = -1, maxY = -1;
+        for (let y = 0; y < outH; y++) {
+          for (let x = 0; x < outW; x++) {
+            const i = (y * outW + x) * 4;
+            const a = d[i + 3];
+            if (a < 20) continue;
+            const lum = (d[i] + d[i + 1] + d[i + 2]) / 3;
+            if (lum > 60) continue; // 只认黑区
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+        if (maxX < minX || maxY < minY) return null;
+        return {
+          x: minX,
+          y: minY,
+          w: Math.max(1, maxX - minX + 1),
+          h: Math.max(1, maxY - minY + 1),
+          maskCanvas: c,
+        };
+      }
 
-            // 生成素体蒙版（后续所有“剪切”都按剪辑蒙版逻辑：素材层 * mask）
-            const maskLayer = createLayerCanvas();
-            const mctx = maskLayer.getContext('2d');
-            if (config.repeatFill) {
-                // 关键：体验卡也按滑杆缩放后的 tile 尺寸重复铺满
-                const tileW = Math.max(1, Math.floor(targetW));
-                const tileH = Math.max(1, Math.floor(targetH));
-                const temp = document.createElement('canvas');
-                temp.width = tileW;
-                temp.height = tileH;
-                temp.getContext('2d').drawImage(wm, 0, 0, tileW, tileH);
-                const p = mctx.createPattern(temp, 'repeat');
-                mctx.fillStyle = p;
-                mctx.fillRect(0, 0, baseW, baseH);
+      function drawPreview(){
+        if (!previewCtx || !previewCanvas) return;
+        resizeCanvasToContainer();
+        clearCanvas();
+
+        const base = imgState.base;
+        if (!base) return;
+
+        const w = previewCanvas.width;
+        const h = previewCanvas.height;
+
+        // 1) 先画底图
+        const baseRect = drawContain(previewCtx, base, 0, 0, w, h);
+
+        const t = typeOfCat(wmState.cat);
+        // 2) 全屏(最多4层) + 底纹(1层) 作为“可共存层”，始终叠加到底图上
+        // 逐像素 Overlay，保证跨浏览器一致
+        const acc = makeOffscreen(w, h);
+        const actx = acc.getContext("2d");
+        if (!actx) return;
+        actx.drawImage(previewCanvas, 0, 0); // 当前画布里已有底图（contain）
+
+        function overlayBlendIntoAcc(topImg){
+          if (!topImg) return;
+          const topLayer = makeOffscreen(w, h);
+          const tctx = topLayer.getContext("2d");
+          if (!tctx) return;
+          drawContain(tctx, topImg, 0, 0, w, h);
+
+          const baseId = actx.getImageData(0, 0, w, h);
+          const topId = tctx.getImageData(0, 0, w, h);
+          const bd = baseId.data;
+          const td = topId.data;
+          for (let i = 0; i < bd.length; i += 4) {
+            const ta = td[i + 3] / 255;
+            if (ta <= 0) continue;
+            const br = bd[i], bg = bd[i + 1], bb = bd[i + 2];
+            const tr = td[i], tg = td[i + 1], tb = td[i + 2];
+            const or = br < 128 ? (2 * br * tr) / 255 : 255 - (2 * (255 - br) * (255 - tr)) / 255;
+            const og = bg < 128 ? (2 * bg * tg) / 255 : 255 - (2 * (255 - bg) * (255 - tg)) / 255;
+            const ob = bb < 128 ? (2 * bb * tb) / 255 : 255 - (2 * (255 - bb) * (255 - tb)) / 255;
+            bd[i]     = Math.round(or * ta + br * (1 - ta));
+            bd[i + 1] = Math.round(og * ta + bg * (1 - ta));
+            bd[i + 2] = Math.round(ob * ta + bb * (1 - ta));
+          }
+          actx.putImageData(baseId, 0, 0);
+        }
+
+        // 底纹（始终可共存）
+        overlayBlendIntoAcc(imgState.watermark.pattern);
+        // 全屏 1-4 层（始终可共存）
+        overlayBlendIntoAcc(imgState.fullLayers[1]);
+        overlayBlendIntoAcc(imgState.fullLayers[2]);
+        overlayBlendIntoAcc(imgState.fullLayers[3]);
+        overlayBlendIntoAcc(imgState.fullLayers[4]);
+
+        previewCtx.clearRect(0, 0, w, h);
+        previewCtx.drawImage(acc, 0, 0);
+
+        // 3) 当前分类是“全屏/底纹”时：共存层已经画完，直接结束
+        if (wmState.cat === "full" || wmState.cat === "pattern") {
+          // 也要继续做“黑区自动对齐 + 预览框叠加”
+        } else {
+          // 4) 当前分类水印（非全屏/底纹时）
+          const wm = imgState.watermark[wmState.cat];
+          if (wm) {
+            const alpha = 1;
+            previewCtx.save();
+            previewCtx.globalAlpha = alpha;
+            previewCtx.globalCompositeOperation = "source-over";
+
+            if (t === "small") {
+              const pct = 0.18 + wmState.size * 0.22;
+              const size = Math.min(baseRect.dw, baseRect.dh) * pct;
+              const pad = Math.round(Math.min(w, h) * 0.03);
+              const dx = baseRect.dx + baseRect.dw - size - pad;
+              const dy = baseRect.dy + baseRect.dh - size - pad;
+              drawContain(previewCtx, wm, dx, dy, size, size);
             } else {
-                mctx.drawImage(wm, x, y, targetW, targetH);
+              const scale = 0.75 + wmState.size * 0.6;
+              const rw = baseRect.dw * scale;
+              const rh = baseRect.dh * scale;
+              const dx = (w - rw) / 2;
+              const dy = (h - rh) / 2;
+              drawContain(previewCtx, wm, dx, dy, rw, rh);
             }
-
-            const clipWithMask = (materialCanvas, maskCanvas) => {
-                const out = createLayerCanvas();
-                const octx = out.getContext('2d');
-                octx.drawImage(materialCanvas, 0, 0);
-                octx.globalCompositeOperation = 'destination-in';
-                octx.drawImage(maskCanvas, 0, 0);
-                octx.globalCompositeOperation = 'source-over';
-                return out;
-            };
-
-            // 第一层（普通）：用户导入水印 + 7px描边；底图模糊50后剪辑蒙版到第一层
-            // 这里用“多方向扩张”构建描边蒙版，保证不同浏览器下都稳定可见
-            const strokeLayer = createLayerCanvas();
-            const sctx = strokeLayer.getContext('2d');
-            const strokeRadius = 7;
-            for (let dx = -strokeRadius; dx <= strokeRadius; dx++) {
-                for (let dy = -strokeRadius; dy <= strokeRadius; dy++) {
-                    if ((dx * dx + dy * dy) <= (strokeRadius * strokeRadius)) {
-                        sctx.drawImage(maskLayer, dx, dy);
-                    }
-                }
-            }
-
-            const layer1Mask = createLayerCanvas();
-            const l1m = layer1Mask.getContext('2d');
-            l1m.drawImage(strokeLayer, 0, 0);
-            l1m.drawImage(maskLayer, 0, 0);
-
-            const blurLayer = createLayerCanvas();
-            const bctx = blurLayer.getContext('2d');
-            bctx.filter = 'blur(50px)';
-            bctx.drawImage(state.baseImage, 0, 0, baseW, baseH);
-            bctx.filter = 'none';
-            const layer1 = clipWithMask(blurLayer, layer1Mask);
-
-            // 第一层增强可见度：在剪辑结果内叠一层黑素体，避免“看不见”
-            const l1v = layer1.getContext('2d');
-            l1v.save();
-            l1v.globalAlpha = 0.28;
-            l1v.drawImage(maskLayer, 0, 0);
-            l1v.restore();
-
-            // 第二层（叠加）：用户导入水印 + 指定贴图重复铺满，剪辑蒙版后合并
-            const layer2Material = createLayerCanvas();
-            const l2m = layer2Material.getContext('2d');
-            l2m.fillStyle = '#000';
-            l2m.fillRect(0, 0, baseW, baseH);
-
-            const texture = await loadTextureImage().catch(() => null);
-            if (texture) {
-                const pattern = l2m.createPattern(texture, 'repeat');
-                l2m.globalCompositeOperation = 'source-atop';
-                l2m.fillStyle = pattern;
-                l2m.fillRect(0, 0, baseW, baseH);
-                l2m.globalCompositeOperation = 'source-over';
-            }
-            const layer2 = clipWithMask(layer2Material, maskLayer);
-
-            // 第二层增强：保持 overlay 模式，但先做对比度提升让叠加更明显
-            const layer2Enhanced = createLayerCanvas();
-            const l2e = layer2Enhanced.getContext('2d');
-            l2e.filter = 'contrast(180%) saturate(120%)';
-            l2e.drawImage(layer2, 0, 0);
-            l2e.filter = 'none';
-
-            // 第三层（叠加）：用户导入水印，上移2px + 右移2px
-            const shiftMask = createLayerCanvas();
-            const sm = shiftMask.getContext('2d');
-            sm.drawImage(maskLayer, 2, -2);
-
-            const layer3Material = createLayerCanvas();
-            const l3m = layer3Material.getContext('2d');
-            l3m.fillStyle = '#000';
-            l3m.fillRect(0, 0, baseW, baseH);
-            const layer3 = clipWithMask(layer3Material, shiftMask);
-
-            // 第四层（叠加）：用户导入水印，反转颜色（白）
-            const layer4Material = createLayerCanvas();
-            const l4m = layer4Material.getContext('2d');
-            l4m.fillStyle = '#fff';
-            l4m.fillRect(0, 0, baseW, baseH);
-            const layer4 = clipWithMask(layer4Material, maskLayer);
-
-            // 第五层（叠加）：用户导入水印，反转颜色（白）
-            const layer5Material = createLayerCanvas();
-            const l5m = layer5Material.getContext('2d');
-            l5m.fillStyle = '#fff';
-            l5m.fillRect(0, 0, baseW, baseH);
-            const layer5 = clipWithMask(layer5Material, maskLayer);
-
-            // 合成输出（严格按你给的图层模式）
-            ctx.save();
-            ctx.globalAlpha = alpha;
-
-            // 第一层：普通
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.drawImage(layer1, 0, 0);
-
-            // 第二层：叠加（加强可见性）
-            ctx.globalCompositeOperation = 'overlay';
-            ctx.globalAlpha = alpha * 1.35;
-            ctx.drawImage(layer2Enhanced, 0, 0);
-
-            // 额外再压一遍 overlay，仍属于叠加，不改变你的图层类型
-            ctx.globalAlpha = alpha * 0.9;
-            ctx.drawImage(layer2Enhanced, 0, 0);
-
-            // 第三层：叠加
-            ctx.globalCompositeOperation = 'overlay';
-            ctx.globalAlpha = alpha;
-            ctx.drawImage(layer3, 0, 0);
-
-            // 第四层：叠加
-            ctx.globalCompositeOperation = 'overlay';
-            ctx.globalAlpha = alpha;
-            ctx.drawImage(layer4, 0, 0);
-
-            // 第五层：叠加
-            ctx.globalCompositeOperation = 'overlay';
-            ctx.globalAlpha = alpha;
-            ctx.drawImage(layer5, 0, 0);
-
-            ctx.restore();
-            ctx.globalCompositeOperation = 'source-over';
+            previewCtx.restore();
+          }
         }
 
-        async function renderPreview() {
-            drawBase();
-            if (!state.baseImage || !state.watermarkImage) return;
+        // 5) 自动对齐到“黑区蒙版”
+        if (imgState.alignMask) {
+          const region = detectBlackRegion(imgState.alignMask, w, h);
+          if (region) {
+            const composed = makeOffscreen(w, h);
+            const cctx = composed.getContext("2d");
+            if (cctx) {
+              cctx.drawImage(previewCanvas, 0, 0);
+              previewCtx.clearRect(0, 0, w, h);
+              drawContain(previewCtx, composed, region.x, region.y, region.w, region.h);
 
-            // 按固定顺序累计渲染，前面打过的水印不会消失
-            const layerOrder = ['plain', 'pattern', 'full', 'box', 'small'];
-            for (const category of layerOrder) {
-                const cfg = state.layerConfigs[category];
-                if (!cfg) continue;
-
-                const isExperience = (category === 'box' || category === 'small') && cfg.effect === '水印体验卡';
-                if (isExperience) {
-                    await drawExperienceCardEffect(category, cfg);
-                } else {
-                    drawDefaultWatermark(category, cfg);
-                }
+              // 用蒙版 alpha 做裁剪，避免超出黑区
+              previewCtx.save();
+              previewCtx.globalCompositeOperation = "destination-in";
+              previewCtx.drawImage(region.maskCanvas, 0, 0);
+              previewCtx.restore();
             }
+          }
         }
 
-        function renderEffectList(cat) {
-            const effects = effectOptions[cat] || [];
-            dynamicEffectsContainer.innerHTML = '';
+        // 6) 最上层叠预览框
+        if (imgState.frame) {
+          previewCtx.save();
+          previewCtx.globalCompositeOperation = "source-over";
+          drawContain(previewCtx, imgState.frame, 0, 0, w, h);
+          previewCtx.restore();
+        }
+      }
 
-            effects.forEach((effectName, index) => {
-                const box = document.createElement('div');
-                const active = effectName === state.activeEffect || (index === 0 && !effects.includes(state.activeEffect));
-                box.className = 'effect-box' + (active ? ' active' : '');
-                box.innerHTML = `<span class="effect-name">${effectName}</span>`;
+      function labelOfType(_type){
+        // 兼容旧提示：这里改为显示当前大分类
+        return labelOfCat(wmState.cat);
+      }
 
-                box.addEventListener('click', () => {
-                    document.querySelectorAll('.effect-box:not(.add-wm-btn)').forEach(b => b.classList.remove('active'));
-                    box.classList.add('active');
-                    state.activeEffect = effectName;
-                    saveActiveLayerConfig();
-                    renderPreview();
-                    saveState();
-                });
+      function go(action){
+        if (action === "watermark") {
+          location.hash = "watermark";
+          return;
+        }
+        if (action === "convert") {
+          location.hash = "convert";
+          return;
+        }
+        location.hash = "";
+      }
 
-                dynamicEffectsContainer.appendChild(box);
+      function setRoute(){
+        const hash = (location.hash || "").replace("#", "");
+        const onWatermark = hash === "watermark";
+        const onPreviewStep = hash === "preview-step";
+        const onConvert = hash === "convert";
+        const onApp = onWatermark || onConvert || onPreviewStep;
+
+        homePage.classList.toggle("hidden", onApp);
+        watermarkPage.classList.toggle("hidden", !onWatermark);
+        previewStepPage.classList.toggle("hidden", !onPreviewStep);
+        convertPage.classList.toggle("hidden", !onConvert);
+        document.body.classList.toggle("route-app", onApp);
+
+        if (onWatermark) updateStage();
+        if (onPreviewStep && batchStatusText) {
+          batchStatusText.textContent = `当前已批量打水印：${batchState.watermarked.length} 张`;
+          renderBatchGrid();
+        }
+      }
+
+      document.addEventListener("click", (e) => {
+        const link = e.target.closest("[data-link]");
+        if (link) {
+          e.preventDefault();
+          go(link.getAttribute("data-link"));
+          return;
+        }
+        const card = e.target.closest(".card");
+        if (card) go(card.getAttribute("data-action"));
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "1") go("watermark");
+        if (e.key === "2") go("convert");
+      });
+
+      backHome.addEventListener("click", () => go(""));
+      if (backHome2) backHome2.addEventListener("click", () => go(""));
+
+      window.addEventListener("hashchange", setRoute);
+      setRoute();
+
+      // 底图导入：只允许点“提示层/画布”，避免和其它按钮冲突
+      function openBasePicker(e){
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        baseFile.click();
+      }
+      if (uploadHint) uploadHint.addEventListener("click", openBasePicker);
+      if (previewCanvas) previewCanvas.addEventListener("click", openBasePicker);
+      addWmBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        wmFile.click();
+      });
+      addWmBtn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          wmFile.click();
+        }
+      });
+      currentWmBox.addEventListener("click", (e) => {
+        e.stopPropagation();
+        wmFile.click();
+      });
+      currentWmBox.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          wmFile.click();
+        }
+      });
+      if (nextStepBtn) {
+        nextStepBtn.addEventListener("click", () => {
+          location.hash = "preview-step";
+        });
+      }
+      if (backToWatermark) {
+        backToWatermark.addEventListener("click", () => {
+          location.hash = "watermark";
+        });
+      }
+      if (batchWatermarkBtn && batchBaseFiles) {
+        batchWatermarkBtn.addEventListener("click", () => batchBaseFiles.click());
+      }
+      if (batchBaseFiles) {
+        batchBaseFiles.addEventListener("change", async () => {
+          const files = Array.from(batchBaseFiles.files || []);
+          if (!files.length) return;
+          const out = [];
+          for (const f of files) {
+            try {
+              const data = await readFileAsDataURL(f);
+              const img = await loadImageFromUrl(data);
+              const c = makeOffscreen(img.naturalWidth || img.width, img.naturalHeight || img.height);
+              composeOnCanvas(c, img);
+              out.push({ name: f.name.replace(/\.[^/.]+$/, "") + "_wm.png", dataUrl: c.toDataURL("image/png") });
+            } catch {}
+          }
+          batchState.watermarked = out;
+          batchState.previewed = [];
+          if (batchStatusText) batchStatusText.textContent = `当前已批量打水印：${out.length} 张`;
+          batchState.viewSource = "watermarked";
+          renderBatchGrid();
+          showToast(`批量打水印完成：${out.length} 张`);
+        });
+      }
+      if (frameBtn && frameFile) {
+        frameBtn.addEventListener("click", () => frameFile.click());
+      }
+      if (maskBtn && maskFile) {
+        maskBtn.addEventListener("click", () => maskFile.click());
+      }
+      if (applyPreviewBatchBtn) {
+        applyPreviewBatchBtn.addEventListener("click", async () => {
+          if (!batchState.watermarked.length) {
+            showToast("请先在上一步批量打水印");
+            return;
+          }
+          const out = [];
+          for (const item of batchState.watermarked) {
+            try {
+              const img = await loadImageFromUrl(item.dataUrl);
+              const c = makeOffscreen(img.naturalWidth || img.width, img.naturalHeight || img.height);
+              const ctx = c.getContext("2d");
+              if (!ctx) continue;
+              ctx.drawImage(img, 0, 0, c.width, c.height);
+              applyPreviewFrameAndMaskOnCanvas(c);
+              out.push({ name: item.name.replace(/_wm\.png$/, "") + "_preview.png", dataUrl: c.toDataURL("image/png") });
+            } catch {}
+          }
+          batchState.previewed = out;
+          batchState.viewSource = "previewed";
+          renderBatchGrid();
+          showToast(`批量套预览完成：${out.length} 张`);
+        });
+      }
+      if (sourceWatermarkedBtn) sourceWatermarkedBtn.addEventListener("click", () => {
+        batchState.viewSource = "watermarked";
+        renderBatchGrid();
+      });
+      if (sourcePreviewedBtn) sourcePreviewedBtn.addEventListener("click", () => {
+        batchState.viewSource = "previewed";
+        renderBatchGrid();
+      });
+      if (grid9Btn) grid9Btn.addEventListener("click", () => {
+        batchState.gridSize = 9;
+        renderBatchGrid();
+      });
+      if (grid12Btn) grid12Btn.addEventListener("click", () => {
+        batchState.gridSize = 12;
+        renderBatchGrid();
+      });
+      if (grid100Btn) grid100Btn.addEventListener("click", () => {
+        batchState.gridSize = 100;
+        renderBatchGrid();
+      });
+      if (lightbox) {
+        lightbox.addEventListener("click", () => {
+          lightbox.classList.remove("show");
+          if (lightboxImg) lightboxImg.removeAttribute("src");
+        });
+      }
+      if (downloadWatermarkedBtn) {
+        downloadWatermarkedBtn.addEventListener("click", () => {
+          if (!batchState.watermarked.length) { showToast("暂无已打水印批次"); return; }
+          batchState.watermarked.forEach((it, idx) => setTimeout(() => downloadDataUrl(it.name, it.dataUrl), idx * 120));
+        });
+      }
+      if (downloadPreviewedBtn) {
+        downloadPreviewedBtn.addEventListener("click", () => {
+          if (!batchState.previewed.length) { showToast("暂无套预览批次"); return; }
+          batchState.previewed.forEach((it, idx) => setTimeout(() => downloadDataUrl(it.name, it.dataUrl), idx * 120));
+        });
+      }
+      if (markBatchBtn) {
+        markBatchBtn.addEventListener("click", async () => {
+          const targetKey = batchState.viewSource === "previewed" ? "previewed" : "watermarked";
+          const src = targetKey === "previewed" ? batchState.previewed : batchState.watermarked;
+          if (!src.length) { showToast("当前预览源没有可标记的图片"); return; }
+          const marked = await markBatchWithNumbers(src);
+          if (!marked.length) { showToast("标记失败"); return; }
+          if (targetKey === "previewed") batchState.previewed = marked;
+          else batchState.watermarked = marked;
+          renderBatchGrid();
+          showToast(`已完成序号标记：${marked.length} 张`);
+        });
+      }
+      if (saveAlbumBtn) {
+        saveAlbumBtn.addEventListener("click", () => {
+          const src = batchState.previewed.length ? batchState.previewed : batchState.watermarked;
+          if (!src.length) { showToast("没有可保存的图片"); return; }
+          src.forEach((it, idx) => setTimeout(() => downloadDataUrl(it.name, it.dataUrl), idx * 120));
+          showToast(`已开始保存：${src.length} 张`);
+        });
+      }
+
+      if (exportBtn) {
+        exportBtn.addEventListener("click", () => {
+          showToast("导出功能稍后做（先把预览与选择做顺）。");
+        });
+      }
+      if (exportBtn2) {
+        exportBtn2.addEventListener("click", () => {
+          showToast("改格式的导出稍后做（会做成转换并下载）。");
+        });
+      }
+
+      // convert page (preview only placeholder)
+      const convertState = { name: "", url: "", format: "jpg" };
+      function revokeConvert(){
+        revokeUrl(convertState.url);
+        convertState.url = "";
+        convertState.name = "";
+        if (convertImg) convertImg.classList.remove("show");
+        if (convertImg) convertImg.removeAttribute("src");
+        if (convertUploadHint) convertUploadHint.style.display = "flex";
+        if (convertMeta) convertMeta.textContent = "未导入图片";
+      }
+      if (convertPreviewArea && convertFile) convertPreviewArea.addEventListener("click", () => convertFile.click());
+      if (convertFile) {
+        convertFile.addEventListener("change", () => {
+          const f = convertFile.files && convertFile.files[0];
+          if (!f) return;
+          revokeConvert();
+          convertState.url = URL.createObjectURL(f);
+          convertState.name = f.name;
+          if (convertImg) {
+            convertImg.src = convertState.url;
+            convertImg.classList.add("show");
+          }
+          if (convertUploadHint) convertUploadHint.style.display = "none";
+          if (convertMeta) convertMeta.textContent = f.name;
+          showToast("图片已导入（下一步实现格式转换）");
+        });
+      }
+      if (convertClearBtn) convertClearBtn.addEventListener("click", () => {
+        if (convertFile) convertFile.value = "";
+        revokeConvert();
+        showToast("已清空");
+      });
+      if (convertPage) {
+        convertPage.querySelectorAll(".tabItem[data-format]").forEach((tab) => {
+          tab.addEventListener("click", () => {
+            const fmt = tab.getAttribute("data-format");
+            if (!fmt) return;
+            convertState.format = fmt;
+            convertPage.querySelectorAll(".tabItem[data-format]").forEach((t) => {
+              const on = t === tab;
+              t.classList.toggle("active", on);
+              t.setAttribute("aria-selected", on ? "true" : "false");
             });
+            showToast(`目标格式：${fmt.toUpperCase()}`);
+          });
+        });
+      }
 
-            if (!effects.includes(state.activeEffect)) {
-                state.activeEffect = effects[0] || '';
+      baseFile.addEventListener("change", () => {
+        const f = baseFile.files && baseFile.files[0];
+        if (!f) return;
+        revokeUrl(wmState.baseUrl);
+        wmState.baseUrl = URL.createObjectURL(f);
+        wmState.baseName = f.name;
+        const img = new Image();
+        img.onload = () => {
+          imgState.base = img;
+          updateStage();
+        };
+        img.src = wmState.baseUrl;
+        showToast("底图已导入");
+      });
+
+      wmFile.addEventListener("change", () => {
+        const f = wmFile.files && wmFile.files[0];
+        if (!f) return;
+        const slot = currentWm();
+        (async () => {
+          revokeUrl(slot.url);
+          slot.name = f.name;
+          slot.url = URL.createObjectURL(f);
+          slot.data = await readFileAsDataURL(f);
+          const img = new Image();
+          img.onload = () => {
+            if (wmState.cat === "full") {
+              imgState.fullLayers[wmState.fullPick] = img;
+            } else {
+              imgState.watermark[wmState.cat] = img;
             }
+            updateStage();
+          };
+          img.src = slot.url;
+          showToast(wmState.cat === "full" ? `全屏第${wmState.fullPick}层已导入` : `水印已导入：${labelOfCat(wmState.cat)}`);
+        })().catch(() => showToast("读取图片失败"));
+      });
+
+      if (frameFile) frameFile.addEventListener("change", () => {
+        const f = frameFile.files && frameFile.files[0];
+        if (!f) return;
+        (async () => {
+          revokeUrl(wmState.frame.url);
+          wmState.frame.name = f.name;
+          wmState.frame.url = URL.createObjectURL(f);
+          wmState.frame.data = await readFileAsDataURL(f);
+          const img = new Image();
+          img.onload = () => { imgState.frame = img; updateStage(); };
+          img.src = wmState.frame.url;
+          showToast("预览框已导入");
+        })().catch(() => showToast("读取预览框失败"));
+      });
+
+      if (maskFile) maskFile.addEventListener("change", () => {
+        const f = maskFile.files && maskFile.files[0];
+        if (!f) return;
+        (async () => {
+          revokeUrl(wmState.alignMask.url);
+          wmState.alignMask.name = f.name;
+          wmState.alignMask.url = URL.createObjectURL(f);
+          wmState.alignMask.data = await readFileAsDataURL(f);
+          const img = new Image();
+          img.onload = () => { imgState.alignMask = img; updateStage(); };
+          img.src = wmState.alignMask.url;
+          showToast("黑区蒙版已导入");
+        })().catch(() => showToast("读取黑区蒙版失败"));
+      });
+
+      categoryTabs.querySelectorAll(".tabItem[data-cat]").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const cat = tab.getAttribute("data-cat");
+          if (!cat) return;
+          wmState.cat = cat;
+          categoryTabs.querySelectorAll(".tabItem[data-cat]").forEach((t) => {
+            const on = t === tab;
+            t.classList.toggle("active", on);
+            t.setAttribute("aria-selected", on ? "true" : "false");
+          });
+          updateStage();
+        });
+      });
+
+      function pickFullLayer(n){
+        wmState.fullPick = n;
+        updateStage();
+      }
+      if (fullL1Box) fullL1Box.addEventListener("click", (e) => { e.stopPropagation(); pickFullLayer(1); });
+      if (fullL2Box) fullL2Box.addEventListener("click", (e) => { e.stopPropagation(); pickFullLayer(2); });
+      if (fullL3Box) fullL3Box.addEventListener("click", (e) => { e.stopPropagation(); pickFullLayer(3); });
+      if (fullL4Box) fullL4Box.addEventListener("click", (e) => { e.stopPropagation(); pickFullLayer(4); });
+      if (fullL1Box) fullL1Box.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickFullLayer(1); } });
+      if (fullL2Box) fullL2Box.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickFullLayer(2); } });
+      if (fullL3Box) fullL3Box.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickFullLayer(3); } });
+      if (fullL4Box) fullL4Box.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickFullLayer(4); } });
+
+      opacityRange.addEventListener("input", () => {
+        const v = Number(opacityRange.value);
+        wmState.opacity = 1;
+        opacityRange.value = "100";
+      });
+
+      sizeRange.addEventListener("input", () => {
+        const v = Number(sizeRange.value);
+        wmState.size = Math.max(0.1, Math.min(1, v / 100));
+        drawPreview();
+      });
+
+      clearAllBtn.addEventListener("click", () => {
+        revokeUrl(wmState.baseUrl);
+        wmState.baseUrl = "";
+        wmState.baseName = "";
+        imgState.base = null;
+        Object.keys(wmState.watermark).forEach((k) => {
+          revokeUrl(wmState.watermark[k].url);
+          wmState.watermark[k].url = "";
+          wmState.watermark[k].name = "";
+          wmState.watermark[k].data = "";
+          imgState.watermark[k] = null;
+        });
+        [1,2,3,4].forEach((n) => {
+          revokeUrl(wmState.fullLayers[n].url);
+          wmState.fullLayers[n].url = "";
+          wmState.fullLayers[n].name = "";
+          wmState.fullLayers[n].data = "";
+          imgState.fullLayers[n] = null;
+        });
+        revokeUrl(wmState.frame.url);
+        wmState.frame.url = "";
+        wmState.frame.name = "";
+        wmState.frame.data = "";
+        imgState.frame = null;
+        revokeUrl(wmState.alignMask.url);
+        wmState.alignMask.url = "";
+        wmState.alignMask.name = "";
+        wmState.alignMask.data = "";
+        imgState.alignMask = null;
+        if (baseFile) baseFile.value = "";
+        if (wmFile) wmFile.value = "";
+        if (frameFile) frameFile.value = "";
+        if (maskFile) maskFile.value = "";
+        showToast("已清空");
+        updateStage();
+      });
+
+      // 方案按钮
+      if (savePresetBtn) savePresetBtn.addEventListener("click", async () => {
+        try {
+          if (!presetDb) presetDb = await openPresetDb();
+          const nameInput = prompt("输入方案名（用于下次直接套用）");
+          const name = idOfPreset(nameInput);
+          if (!name) return;
+          const doc = {
+            id: name,
+            name,
+            payload: clonePresetPayload(),
+            updatedAt: Date.now(),
+          };
+          await savePresetDoc(doc);
+          await refreshPresetSelect(name);
+          showToast(`方案已保存：${name}`);
+        } catch {
+          showToast("保存方案失败");
         }
+      });
 
-        tabs.forEach(tab => {
-            tab.addEventListener('click', function() {
-                saveActiveLayerConfig();
-                tabs.forEach(t => t.classList.remove('active'));
-                this.classList.add('active');
-                state.activeCategory = this.getAttribute('data-cat');
-                loadLayerConfig(state.activeCategory);
-                renderEffectList(state.activeCategory);
-                renderPreview();
-                saveState();
-            });
-        });
+      if (applyPresetBtn) applyPresetBtn.addEventListener("click", async () => {
+        try {
+          if (!presetDb) presetDb = await openPresetDb();
+          const id = presetSelect && presetSelect.value ? presetSelect.value : "";
+          if (!id) { showToast("请先选择方案"); return; }
+          const doc = await getPresetDoc(id);
+          if (!doc || !doc.payload) { showToast("方案不存在"); return; }
+          await applyPresetPayload(doc.payload);
+          updateStage();
+          showToast(`已套用方案：${doc.name}`);
+        } catch {
+          showToast("套用方案失败");
+        }
+      });
 
-        imgUpload.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+      if (deletePresetBtn) deletePresetBtn.addEventListener("click", async () => {
+        try {
+          if (!presetDb) presetDb = await openPresetDb();
+          const id = presetSelect && presetSelect.value ? presetSelect.value : "";
+          if (!id) { showToast("请先选择方案"); return; }
+          await deletePresetDoc(id);
+          await refreshPresetSelect("");
+          showToast("方案已删除");
+        } catch {
+          showToast("删除方案失败");
+        }
+      });
 
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const img = new Image();
-                img.onload = function() {
-                    state.baseImage = img;
-                    state.baseImageDataUrl = event.target.result;
-                    hint.style.display = 'none';
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    renderPreview();
-                    saveState();
-                };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        });
+      // 跟随容器尺寸变化重绘（更像参考页的“沉浸式预览”）
+      if (window.ResizeObserver && previewArea) {
+        const ro = new ResizeObserver(() => drawPreview());
+        ro.observe(previewArea);
+      } else {
+        window.addEventListener("resize", () => drawPreview());
+      }
 
-        wmUpload.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const img = new Image();
-                img.onload = function() {
-                    state.watermarkImage = img;
-                    state.watermarkImageDataUrl = event.target.result;
-                    renderPreview();
-                    saveState();
-                };
-                img.src = event.target.result;
-            };
-            reader.readAsDataURL(file);
-        });
-
-        sizeSlider.addEventListener('input', function(e) {
-            state.sizePercent = Number(e.target.value);
-            saveActiveLayerConfig();
-            renderPreview();
-            saveState();
-        });
-
-        opacitySlider.addEventListener('input', function(e) {
-            state.opacityPercent = Number(e.target.value);
-            saveActiveLayerConfig();
-            renderPreview();
-            saveState();
-        });
-
-        // 双击预览区切换“重复铺满”
-        document.querySelector('.preview-area').addEventListener('dblclick', function() {
-            state.repeatFill = !state.repeatFill;
-            saveActiveLayerConfig();
-            renderPreview();
-            saveState();
-        });
-
-        // 导出当前预览为 PNG
-        exportBtn.addEventListener('click', async function() {
-            if (!state.baseImage) {
-                alert('请先导入底图再导出');
-                return;
-            }
-
-            // 确保导出前是最新渲染结果
-            await renderPreview();
-
-            const link = document.createElement('a');
-            const time = new Date();
-            const pad = n => String(n).padStart(2, '0');
-            const fileName = `watermark_${time.getFullYear()}${pad(time.getMonth() + 1)}${pad(time.getDate())}_${pad(time.getHours())}${pad(time.getMinutes())}${pad(time.getSeconds())}.png`;
-            link.download = fileName;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-        });
-
-        saveActiveLayerConfig();
-        renderEffectList(state.activeCategory);
-        restoreState();
+      (async () => {
+        try {
+          presetDb = await openPresetDb();
+          await refreshPresetSelect("");
+        } catch {
+          showToast("方案数据库初始化失败");
+        }
+      })();
     </script>
-</body>
+  </body>
 </html>
+
