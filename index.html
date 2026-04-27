@@ -724,6 +724,7 @@
                 <div style="display:flex; gap:8px;">
                   <button class="btn" id="markBatchBtn" type="button" style="font-size:12px;">一键标记</button>
                   <button class="btn" id="saveAlbumBtn" type="button" style="font-size:12px;">一键保存到相册</button>
+                  <button class="btn" id="exportZipBtn" type="button" style="font-size:12px;">一键导出ZIP</button>
                 </div>
                 <input id="frameFile" type="file" accept="image/*" hidden />
                 <input id="maskFile" type="file" accept="image/*" hidden />
@@ -785,6 +786,7 @@
       <img id="lightboxImg" alt="放大图" />
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script>
       const toast = document.getElementById("toast");
       let toastTimer = null;
@@ -840,6 +842,7 @@
       const downloadPreviewedBtn = document.getElementById("downloadPreviewedBtn");
       const markBatchBtn = document.getElementById("markBatchBtn");
       const saveAlbumBtn = document.getElementById("saveAlbumBtn");
+      const exportZipBtn = document.getElementById("exportZipBtn");
       const sourceWatermarkedBtn = document.getElementById("sourceWatermarkedBtn");
       const sourcePreviewedBtn = document.getElementById("sourcePreviewedBtn");
       const grid9Btn = document.getElementById("grid9Btn");
@@ -1219,8 +1222,8 @@
             ctx.textBaseline = "top";
             ctx.lineJoin = "round";
             ctx.lineWidth = Math.max(3, Math.round(fontSize * 0.16));
-            ctx.strokeStyle = "rgba(0,0,0,0.55)";
-            ctx.fillStyle = "#ffffff";
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.fillStyle = "#ff2b2b";
             ctx.strokeText(num, pad, pad);
             ctx.fillText(num, pad, pad);
 
@@ -1734,6 +1737,30 @@
           if (!src.length) { showToast("没有可保存的图片"); return; }
           src.forEach((it, idx) => setTimeout(() => downloadDataUrl(it.name, it.dataUrl), idx * 120));
           showToast(`已开始保存：${src.length} 张`);
+        });
+      }
+      if (exportZipBtn) {
+        exportZipBtn.addEventListener("click", async () => {
+          const src = batchState.previewed.length ? batchState.previewed : batchState.watermarked;
+          if (!src.length) { showToast("没有可导出的图片"); return; }
+          if (!window.JSZip) { showToast("ZIP组件加载失败，请刷新后重试"); return; }
+          try {
+            const zip = new window.JSZip();
+            for (const it of src) {
+              const base64 = String(it.dataUrl).split(",")[1] || "";
+              if (!base64) continue;
+              zip.file(it.name, base64, { base64: true });
+            }
+            const blob = await zip.generateAsync({ type: "blob" });
+            const now = new Date();
+            const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}_${String(now.getHours()).padStart(2,"0")}${String(now.getMinutes()).padStart(2,"0")}`;
+            const url = URL.createObjectURL(blob);
+            downloadDataUrl(`watermark_batch_${stamp}.zip`, url);
+            setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 1500);
+            showToast(`ZIP已导出：${src.length} 张`);
+          } catch {
+            showToast("导出ZIP失败");
+          }
         });
       }
 
