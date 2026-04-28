@@ -723,6 +723,7 @@
                 </div>
                 <div style="display:flex; gap:8px;">
                   <button class="btn" id="markBatchBtn" type="button" style="font-size:12px;">一键标记</button>
+                  <input id="markStartInput" type="number" min="1" step="1" value="1" style="width:88px; border:1px solid var(--border-soft); border-radius:10px; padding:0 10px; font-size:12px;" title="起始序号" />
                   <button class="btn" id="saveAlbumBtn" type="button" style="font-size:12px;">一键保存到相册</button>
                   <button class="btn" id="exportZipBtn" type="button" style="font-size:12px;">一键导出ZIP</button>
                 </div>
@@ -841,6 +842,7 @@
       const downloadWatermarkedBtn = document.getElementById("downloadWatermarkedBtn");
       const downloadPreviewedBtn = document.getElementById("downloadPreviewedBtn");
       const markBatchBtn = document.getElementById("markBatchBtn");
+      const markStartInput = document.getElementById("markStartInput");
       const saveAlbumBtn = document.getElementById("saveAlbumBtn");
       const exportZipBtn = document.getElementById("exportZipBtn");
       const sourceWatermarkedBtn = document.getElementById("sourceWatermarkedBtn");
@@ -1202,8 +1204,9 @@
         a.remove();
       }
 
-      async function markBatchWithNumbers(list){
+      async function markBatchWithNumbers(list, startFrom){
         const out = [];
+        const baseNum = Math.max(1, Number(startFrom) || 1);
         for (let i = 0; i < list.length; i++) {
           const it = list[i];
           try {
@@ -1215,7 +1218,7 @@
             if (!ctx) continue;
             ctx.drawImage(img, 0, 0, w, h);
 
-            const num = String(i + 1);
+            const num = String(baseNum + i);
             const pad = Math.max(12, Math.round(Math.min(w, h) * 0.02));
             const fontSize = Math.max(28, Math.round(Math.min(w, h) * 0.06));
             ctx.font = `700 ${fontSize}px -apple-system, "PingFang SC", "Microsoft YaHei", Arial, sans-serif`;
@@ -1723,12 +1726,13 @@
           const targetKey = batchState.viewSource === "previewed" ? "previewed" : "watermarked";
           const src = targetKey === "previewed" ? batchState.previewed : batchState.watermarked;
           if (!src.length) { showToast("当前预览源没有可标记的图片"); return; }
-          const marked = await markBatchWithNumbers(src);
+          const startFrom = markStartInput ? markStartInput.value : "1";
+          const marked = await markBatchWithNumbers(src, startFrom);
           if (!marked.length) { showToast("标记失败"); return; }
           if (targetKey === "previewed") batchState.previewed = marked;
           else batchState.watermarked = marked;
           renderBatchGrid();
-          showToast(`已完成序号标记：${marked.length} 张`);
+          showToast(`已完成序号标记：${marked.length} 张（起始 ${Math.max(1, Number(startFrom) || 1)}）`);
         });
       }
       if (saveAlbumBtn) {
