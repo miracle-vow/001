@@ -520,6 +520,38 @@
         border-radius:8px;
         background:#111;
       }
+      .coupleCard{
+        border:2px solid var(--btn-blue);
+        background:#fff;
+        border-radius:10px;
+        overflow:hidden;
+        cursor:pointer;
+        display:flex;
+        position: relative;
+      }
+      .coupleCard::after{
+        content:'已配对';
+        position:absolute;
+        top:0; right:0;
+        background:var(--btn-blue);
+        color:#fff;
+        font-size:10px;
+        padding:2px 6px;
+        border-bottom-left-radius:6px;
+      }
+      .coupleCard img{
+        width:50%;
+        aspect-ratio:1/1;
+        object-fit:cover;
+        display:block;
+        border-right:1px solid var(--border-soft);
+      }
+      .coupleCard img:last-child{
+        border-right:none;
+      }
+      .pendingCard{
+        border:2px dashed #ff2b2b !important;
+      }
     </style>
   </head>
   <body>
@@ -717,10 +749,17 @@
                   <span class="effectName" style="margin-top:0;">导入预览框</span>
                 </div>
                 <div class="effectBox" id="maskBtn" role="button" tabindex="0">
-                  <span class="effectName" style="margin-top:0;">导入黑区蒙版</span>
+                  <span class="effectName" style="margin-top:0;">导入蒙版1</span>
+                </div>
+                <div class="effectBox" id="maskBtn2" role="button" tabindex="0" style="display:none;">
+                  <span class="effectName" style="margin-top:0;">导入蒙版2</span>
                 </div>
               </div>
               <div class="slidersArea">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                  <input type="checkbox" id="coupleModeChk" />
+                  <label for="coupleModeChk" style="font-size:12px; color:var(--text-main); cursor:pointer; user-select:none;">开启情头模式 (点两张图自动配对)</label>
+                </div>
                 <div style="display:flex; gap:8px;">
                   <button class="btn" id="downloadWatermarkedBtn" type="button" style="font-size:12px;">下载已打水印批次</button>
                   <button class="btn" id="downloadPreviewedBtn" type="button" style="font-size:12px;">下载套预览批次</button>
@@ -733,6 +772,7 @@
                 </div>
                 <input id="frameFile" type="file" accept="image/*" hidden />
                 <input id="maskFile" type="file" accept="image/*" hidden />
+                <input id="maskFile2" type="file" accept="image/*" hidden />
               </div>
             </div>
           </div>
@@ -880,6 +920,7 @@
         },
         frame: { name: "", url: "", data: "" },
         alignMask: { name: "", url: "", data: "" },
+        alignMask2: { name: "", url: "", data: "" },
         opacity: 1,
         size: 0.60,
       };
@@ -901,10 +942,14 @@
         },
         frame: null,
         alignMask: null,
+        alignMask2: null,
       };
       const batchState = {
-        watermarked: [], // {name,dataUrl}
-        previewed: [], // {name,dataUrl}
+        watermarked: [], // {id, name, dataUrl}
+        previewed: [], // {name, dataUrl}
+        couples: [],
+        pendingCouple: null,
+        isCoupleMode: false,
         viewSource: "watermarked",
         gridSize: 9,
       };
@@ -1010,6 +1055,7 @@
           },
           frame: { name: wmState.frame.name, data: wmState.frame.data || "" },
           alignMask: { name: wmState.alignMask.name, data: wmState.alignMask.data || "" },
+          alignMask2: { name: wmState.alignMask2.name, data: wmState.alignMask2.data || "" },
         };
       }
 
@@ -1072,6 +1118,15 @@
         imgState.alignMask = null;
         if (wmState.alignMask.url) {
           try { imgState.alignMask = await loadImageFromUrl(wmState.alignMask.url); } catch {}
+        }
+
+        revokeUrl(wmState.alignMask2.url);
+        wmState.alignMask2.name = payload.alignMask2 && payload.alignMask2.name ? payload.alignMask2.name : "";
+        wmState.alignMask2.data = payload.alignMask2 && payload.alignMask2.data ? payload.alignMask2.data : "";
+        wmState.alignMask2.url = wmState.alignMask2.data || "";
+        imgState.alignMask2 = null;
+        if (wmState.alignMask2.url) {
+          try { imgState.alignMask2 = await loadImageFromUrl(wmState.alignMask2.url); } catch {}
         }
       }
 
@@ -1382,17 +1437,56 @@
         const cols = batchState.gridSize === 9 ? 3 : (batchState.gridSize === 12 ? 4 : 10);
         const maxCount = batchState.gridSize;
         batchGrid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-        list.slice(0, maxCount).forEach((it) => {
-          const card = document.createElement("div");
-          card.className = "batchCard";
-          card.innerHTML = `<img src="${it.dataUrl}" alt="${it.name}"/><p title="${it.name}">${it.name}</p>`;
-          card.addEventListener("click", () => {
-            if (!lightbox || !lightboxImg) return;
-            lightboxImg.src = it.dataUrl;
-            lightbox.classList.add("show");
+        
+        if (batchState.viewSource === "watermarked" && batchState.isCoupleMode) {
+          const coupled = new Set();
+          batchState.couples.forEach(c => { coupled.add(c[0]); coupled.add(c[1]); });
+          const uncoupled = list.filter(it => !coupled.has(it));
+          
+          batchState.couples.forEach(cpl => {
+            const card = document.createElement("div");
+            card.className = "coupleCard";
+            card.innerHTML = `<img src="${cpl[0].dataUrl}"/><img src="${cpl[1].dataUrl}"/>`;
+            card.addEventListener("click", () => {
+              batchState.couples = batchState.couples.filter(c => c !== cpl);
+              renderBatchGrid();
+            });
+            batchGrid.appendChild(card);
           });
-          batchGrid.appendChild(card);
-        });
+          
+          uncoupled.slice(0, maxCount).forEach(it => {
+            const card = document.createElement("div");
+            card.className = "batchCard";
+            if (batchState.pendingCouple === it) card.classList.add("pendingCard");
+            card.innerHTML = `<img src="${it.dataUrl}" alt="${it.name}"/><p title="${it.name}">${it.name}</p>`;
+            card.addEventListener("click", () => {
+              if (batchState.pendingCouple) {
+                if (batchState.pendingCouple === it) {
+                  batchState.pendingCouple = null;
+                } else {
+                  batchState.couples.push([batchState.pendingCouple, it]);
+                  batchState.pendingCouple = null;
+                }
+              } else {
+                batchState.pendingCouple = it;
+              }
+              renderBatchGrid();
+            });
+            batchGrid.appendChild(card);
+          });
+        } else {
+          list.slice(0, maxCount).forEach((it) => {
+            const card = document.createElement("div");
+            card.className = "batchCard";
+            card.innerHTML = `<img src="${it.dataUrl}" alt="${it.name}"/><p title="${it.name}">${it.name}</p>`;
+            card.addEventListener("click", () => {
+              if (!lightbox || !lightboxImg) return;
+              lightboxImg.src = it.dataUrl;
+              lightbox.classList.add("show");
+            });
+            batchGrid.appendChild(card);
+          });
+        }
       }
 
       function detectBlackRegion(maskImg, outW, outH){
@@ -1709,6 +1803,16 @@
       if (maskBtn && maskFile) {
         maskBtn.addEventListener("click", () => maskFile.click());
       }
+      if (maskBtn2 && maskFile2) {
+        maskBtn2.addEventListener("click", () => maskFile2.click());
+      }
+      if (coupleModeChk) {
+        coupleModeChk.addEventListener("change", (e) => {
+          batchState.isCoupleMode = e.target.checked;
+          if (maskBtn2) maskBtn2.style.display = batchState.isCoupleMode ? "" : "none";
+          renderBatchGrid();
+        });
+      }
       if (applyPreviewBatchBtn) {
         applyPreviewBatchBtn.addEventListener("click", async () => {
           if (!batchState.watermarked.length) {
@@ -1716,6 +1820,56 @@
             return;
           }
           const out = [];
+          if (batchState.isCoupleMode) {
+            if (!batchState.couples.length) {
+              showToast("请先在列表里点击配对两张图");
+              return;
+            }
+            for (const cpl of batchState.couples) {
+              try {
+                const img1 = await loadImageFromUrl(cpl[0].dataUrl);
+                const img2 = await loadImageFromUrl(cpl[1].dataUrl);
+                let w = imgState.frame ? (imgState.frame.naturalWidth || imgState.frame.width) : 3000;
+                let h = imgState.frame ? (imgState.frame.naturalHeight || imgState.frame.height) : 3000;
+                const c = makeOffscreen(w, h);
+                const ctx = c.getContext("2d");
+                if (!ctx) continue;
+                
+                if (imgState.alignMask) {
+                  const r1 = detectBlackRegion(imgState.alignMask, w, h);
+                  if (r1) {
+                    const c1 = makeOffscreen(w, h);
+                    const cx1 = c1.getContext("2d");
+                    drawContain(cx1, img1, r1.x, r1.y, r1.w, r1.h);
+                    cx1.globalCompositeOperation = "destination-in";
+                    cx1.drawImage(r1.maskCanvas, 0, 0);
+                    ctx.drawImage(c1, 0, 0);
+                  }
+                }
+                
+                if (imgState.alignMask2) {
+                  const r2 = detectBlackRegion(imgState.alignMask2, w, h);
+                  if (r2) {
+                    const c2 = makeOffscreen(w, h);
+                    const cx2 = c2.getContext("2d");
+                    drawContain(cx2, img2, r2.x, r2.y, r2.w, r2.h);
+                    cx2.globalCompositeOperation = "destination-in";
+                    cx2.drawImage(r2.maskCanvas, 0, 0);
+                    ctx.drawImage(c2, 0, 0);
+                  }
+                }
+                
+                if (imgState.frame) {
+                  ctx.save();
+                  drawContain(ctx, imgState.frame, 0, 0, w, h);
+                  ctx.restore();
+                }
+                
+                const cplName = (cpl[0].name.replace(/_wm\.png$/, "") + "_" + cpl[1].name.replace(/_wm\.png$/, "")).substring(0, 40) + "_preview.png";
+                out.push({ name: cplName, dataUrl: c.toDataURL("image/png") });
+              } catch(e) { console.log(e); }
+            }
+          } else {
           for (const item of batchState.watermarked) {
             try {
               const img = await loadImageFromUrl(item.dataUrl);
@@ -1726,6 +1880,7 @@
               applyPreviewFrameAndMaskOnCanvas(c);
               out.push({ name: item.name.replace(/_wm\.png$/, "") + "_preview.png", dataUrl: c.toDataURL("image/png") });
             } catch {}
+          }
           }
           batchState.previewed = out;
           batchState.viewSource = "previewed";
@@ -1946,6 +2101,21 @@
         })().catch(() => showToast("读取黑区蒙版失败"));
       });
 
+      if (maskFile2) maskFile2.addEventListener("change", () => {
+        const f = maskFile2.files && maskFile2.files[0];
+        if (!f) return;
+        (async () => {
+          revokeUrl(wmState.alignMask2.url);
+          wmState.alignMask2.name = f.name;
+          wmState.alignMask2.url = URL.createObjectURL(f);
+          wmState.alignMask2.data = await readFileAsDataURL(f);
+          const img = new Image();
+          img.onload = () => { imgState.alignMask2 = img; updateStage(); };
+          img.src = wmState.alignMask2.url;
+          showToast("蒙版2已导入");
+        })().catch(() => showToast("读取蒙版2失败"));
+      });
+
       categoryTabs.querySelectorAll(".tabItem[data-cat]").forEach((tab) => {
         tab.addEventListener("click", () => {
           const cat = tab.getAttribute("data-cat");
@@ -2014,6 +2184,11 @@
         wmState.alignMask.name = "";
         wmState.alignMask.data = "";
         imgState.alignMask = null;
+        revokeUrl(wmState.alignMask2.url);
+        wmState.alignMask2.url = "";
+        wmState.alignMask2.name = "";
+        wmState.alignMask2.data = "";
+        imgState.alignMask2 = null;
         if (baseFile) baseFile.value = "";
         if (wmFile) wmFile.value = "";
         if (frameFile) frameFile.value = "";
