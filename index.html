@@ -661,6 +661,10 @@
                   <span style="font-size:12px; color:var(--text-sub);" id="metaTitle">未导入底图</span>
                   <button class="btn" id="clearAllBtn" type="button" style="font-size:12px; color:var(--text-sub);">清空</button>
                 </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <input type="checkbox" id="isPatternModeChk" />
+                  <label for="isPatternModeChk" style="font-size:12px; color:var(--text-main); cursor:pointer; user-select:none;">作为柄图铺满 (3000×3000画布)</label>
+                </div>
                 <div class="sliderRow" style="align-items:center;">
                   <span>方案</span>
                   <select id="presetSelect" style="flex:1; min-width:0; height:34px; border:1px solid var(--border-soft); border-radius:10px; padding:0 10px; background:#fff;">
@@ -831,6 +835,7 @@
       const savePresetBtn = document.getElementById("savePresetBtn");
       const applyPresetBtn = document.getElementById("applyPresetBtn");
       const deletePresetBtn = document.getElementById("deletePresetBtn");
+      const isPatternModeChk = document.getElementById("isPatternModeChk");
       const nextStepBtn = document.getElementById("nextStepBtn");
       const batchWatermarkBtn = document.getElementById("batchWatermarkBtn");
       const batchBaseFiles = document.getElementById("batchBaseFiles");
@@ -856,6 +861,7 @@
 
       const wmState = {
         cat: "box",
+        isPatternMode: false,
         fullPick: 1, // 全屏导入目标层：1/2/3/4
         baseName: "",
         baseUrl: "",
@@ -988,6 +994,7 @@
 
       function clonePresetPayload(){
         return {
+          isPatternMode: wmState.isPatternMode,
           size: wmState.size,
           watermark: {
             box: { name: wmState.watermark.box.name, data: wmState.watermark.box.data || "" },
@@ -1016,6 +1023,9 @@
       }
 
       async function applyPresetPayload(payload){
+        wmState.isPatternMode = Boolean(payload.isPatternMode);
+        if (isPatternModeChk) isPatternModeChk.checked = wmState.isPatternMode;
+
         wmState.size = Number(payload.size) > 0 ? Number(payload.size) : wmState.size;
         if (sizeRange) sizeRange.value = String(Math.round(wmState.size * 100));
 
@@ -1247,7 +1257,16 @@
         ctx.clearRect(0, 0, w, h);
         ctx.fillStyle = "#F8F8F8";
         ctx.fillRect(0, 0, w, h);
-        const baseRect = drawContain(ctx, baseImg, 0, 0, w, h);
+
+        let baseRect;
+        if (wmState.isPatternMode) {
+          const pat = ctx.createPattern(baseImg, 'repeat');
+          ctx.fillStyle = pat;
+          ctx.fillRect(0, 0, w, h);
+          baseRect = { dx: 0, dy: 0, dw: w, dh: h };
+        } else {
+          baseRect = drawContain(ctx, baseImg, 0, 0, w, h);
+        }
 
         const acc = makeOffscreen(w, h);
         const actx = acc.getContext("2d");
@@ -1420,7 +1439,30 @@
         const h = previewCanvas.height;
 
         // 1) 先画底图
-        const baseRect = drawContain(previewCtx, base, 0, 0, w, h);
+        let baseRect;
+        if (wmState.isPatternMode) {
+          const conceptualW = 3000;
+          const conceptualH = 3000;
+          const s = Math.min(w / conceptualW, h / conceptualH);
+          const dw = conceptualW * s;
+          const dh = conceptualH * s;
+          const dx = (w - dw) / 2;
+          const dy = (h - dh) / 2;
+          baseRect = { dx, dy, dw, dh };
+
+          previewCtx.save();
+          previewCtx.beginPath();
+          previewCtx.rect(dx, dy, dw, dh);
+          previewCtx.clip();
+          previewCtx.translate(dx, dy);
+          previewCtx.scale(s, s);
+          const pat = previewCtx.createPattern(base, 'repeat');
+          previewCtx.fillStyle = pat;
+          previewCtx.fillRect(0, 0, conceptualW, conceptualH);
+          previewCtx.restore();
+        } else {
+          baseRect = drawContain(previewCtx, base, 0, 0, w, h);
+        }
 
         const t = typeOfCat(wmState.cat);
         // 2) 全屏(最多4层) + 底纹(1层) 作为“可共存层”，始终叠加到底图上
@@ -1623,6 +1665,12 @@
           location.hash = "preview-step";
         });
       }
+      if (isPatternModeChk) {
+        isPatternModeChk.addEventListener("change", (e) => {
+          wmState.isPatternMode = e.target.checked;
+          updateStage();
+        });
+      }
       if (backToWatermark) {
         backToWatermark.addEventListener("click", () => {
           location.hash = "watermark";
@@ -1640,7 +1688,9 @@
             try {
               const data = await readFileAsDataURL(f);
               const img = await loadImageFromUrl(data);
-              const c = makeOffscreen(img.naturalWidth || img.width, img.naturalHeight || img.height);
+              const outW = wmState.isPatternMode ? 3000 : (img.naturalWidth || img.width);
+              const outH = wmState.isPatternMode ? 3000 : (img.naturalHeight || img.height);
+              const c = makeOffscreen(outW, outH);
               composeOnCanvas(c, img);
               out.push({ name: f.name.replace(/\.[^/.]+$/, "") + "_wm.png", dataUrl: c.toDataURL("image/png") });
             } catch {}
@@ -2040,4 +2090,3 @@
     </script>
   </body>
 </html>
-
