@@ -697,7 +697,16 @@
                   <input type="checkbox" id="isPatternModeChk" />
                   <label for="isPatternModeChk" style="font-size:12px; color:var(--text-main); cursor:pointer; user-select:none;">作为柄图铺满 (3000×3000画布)</label>
                 </div>
-                <div class="sliderRow" style="align-items:center;">
+                <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+                  <input type="checkbox" id="isMosaicChk" />
+                  <label for="isMosaicChk" style="font-size:12px; color:var(--text-main); cursor:pointer; user-select:none;">底图马赛克</label>
+                </div>
+                <div class="sliderRow" id="mosaicSizeRow" style="display:none; margin-top:6px;">
+                  <span>马赛克</span>
+                  <input type="range" id="mosaicSizeRange" min="2" max="100" value="20" />
+                  <span id="mosaicSizeVal" style="font-size:12px; color:var(--text-sub); width:36px; text-align:right;">20px</span>
+                </div>
+                <div class="sliderRow" style="align-items:center; margin-top:6px;">
                   <span>方案</span>
                   <select id="presetSelect" style="flex:1; min-width:0; height:34px; border:1px solid var(--border-soft); border-radius:10px; padding:0 10px; background:#fff;">
                     <option value="">未选择方案</option>
@@ -876,6 +885,10 @@
       const applyPresetBtn = document.getElementById("applyPresetBtn");
       const deletePresetBtn = document.getElementById("deletePresetBtn");
       const isPatternModeChk = document.getElementById("isPatternModeChk");
+      const isMosaicChk = document.getElementById("isMosaicChk");
+      const mosaicSizeRow = document.getElementById("mosaicSizeRow");
+      const mosaicSizeRange = document.getElementById("mosaicSizeRange");
+      const mosaicSizeVal = document.getElementById("mosaicSizeVal");
       const nextStepBtn = document.getElementById("nextStepBtn");
       const batchWatermarkBtn = document.getElementById("batchWatermarkBtn");
       const batchBaseFiles = document.getElementById("batchBaseFiles");
@@ -902,6 +915,8 @@
       const wmState = {
         cat: "box",
         isPatternMode: false,
+        isMosaic: false,
+        mosaicSize: 20,
         fullPick: 1, // 全屏导入目标层：1/2/3/4
         baseName: "",
         baseUrl: "",
@@ -1040,6 +1055,8 @@
       function clonePresetPayload(){
         return {
           isPatternMode: wmState.isPatternMode,
+          isMosaic: wmState.isMosaic,
+          mosaicSize: wmState.mosaicSize,
           size: wmState.size,
           watermark: {
             box: { name: wmState.watermark.box.name, data: wmState.watermark.box.data || "" },
@@ -1071,6 +1088,14 @@
       async function applyPresetPayload(payload){
         wmState.isPatternMode = Boolean(payload.isPatternMode);
         if (isPatternModeChk) isPatternModeChk.checked = wmState.isPatternMode;
+
+        wmState.isMosaic = Boolean(payload.isMosaic);
+        if (isMosaicChk) isMosaicChk.checked = wmState.isMosaic;
+        if (mosaicSizeRow) mosaicSizeRow.style.display = wmState.isMosaic ? "flex" : "none";
+
+        wmState.mosaicSize = payload.mosaicSize !== undefined ? Number(payload.mosaicSize) : wmState.mosaicSize;
+        if (mosaicSizeRange) mosaicSizeRange.value = String(wmState.mosaicSize);
+        if (mosaicSizeVal) mosaicSizeVal.textContent = wmState.mosaicSize + "px";
 
         wmState.size = Number(payload.size) > 0 ? Number(payload.size) : wmState.size;
         if (sizeRange) sizeRange.value = String(Math.round(wmState.size * 100));
@@ -1260,6 +1285,27 @@
         return c;
       }
 
+      function applyMosaicFast(ctx, x, y, w, h, blockSize) {
+        if (blockSize <= 1.5 || w <= 0 || h <= 0) return;
+        const rx = Math.round(x);
+        const ry = Math.round(y);
+        const rw = Math.round(w);
+        const rh = Math.round(h);
+        if (rw <= 0 || rh <= 0) return;
+
+        const sw = Math.max(1, Math.floor(rw / blockSize));
+        const sh = Math.max(1, Math.floor(rh / blockSize));
+        const c = makeOffscreen(sw, sh);
+        const cCtx = c.getContext("2d");
+        cCtx.imageSmoothingEnabled = false;
+        cCtx.drawImage(ctx.canvas, rx, ry, rw, rh, 0, 0, sw, sh);
+
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(c, 0, 0, sw, sh, rx, ry, rw, rh);
+        ctx.restore();
+      }
+
       function downloadDataUrl(filename, dataUrl){
         const a = document.createElement("a");
         a.href = dataUrl;
@@ -1321,6 +1367,10 @@
           baseRect = { dx: 0, dy: 0, dw: w, dh: h };
         } else {
           baseRect = drawContain(ctx, baseImg, 0, 0, w, h);
+        }
+
+        if (wmState.isMosaic) {
+          applyMosaicFast(ctx, baseRect.dx, baseRect.dy, baseRect.dw, baseRect.dh, wmState.mosaicSize);
         }
 
         const acc = makeOffscreen(w, h);
@@ -1534,10 +1584,11 @@
 
         // 1) 先画底图
         let baseRect;
+        let s;
         if (wmState.isPatternMode) {
           const conceptualW = 3000;
           const conceptualH = 3000;
-          const s = Math.min(w / conceptualW, h / conceptualH);
+          s = Math.min(w / conceptualW, h / conceptualH);
           const dw = conceptualW * s;
           const dh = conceptualH * s;
           const dx = (w - dw) / 2;
@@ -1555,7 +1606,15 @@
           previewCtx.fillRect(0, 0, conceptualW, conceptualH);
           previewCtx.restore();
         } else {
+          const actualW = base.naturalWidth || base.width;
+          const actualH = base.naturalHeight || base.height;
+          s = Math.min(w / actualW, h / actualH);
           baseRect = drawContain(previewCtx, base, 0, 0, w, h);
+        }
+
+        if (wmState.isMosaic) {
+          const previewMosaicSize = Math.max(1, wmState.mosaicSize * s);
+          applyMosaicFast(previewCtx, baseRect.dx, baseRect.dy, baseRect.dw, baseRect.dh, previewMosaicSize);
         }
 
         const t = typeOfCat(wmState.cat);
@@ -1763,6 +1822,20 @@
         isPatternModeChk.addEventListener("change", (e) => {
           wmState.isPatternMode = e.target.checked;
           updateStage();
+        });
+      }
+      if (isMosaicChk) {
+        isMosaicChk.addEventListener("change", (e) => {
+          wmState.isMosaic = e.target.checked;
+          if (mosaicSizeRow) mosaicSizeRow.style.display = wmState.isMosaic ? "flex" : "none";
+          updateStage();
+        });
+      }
+      if (mosaicSizeRange) {
+        mosaicSizeRange.addEventListener("input", (e) => {
+          wmState.mosaicSize = Number(e.target.value);
+          if (mosaicSizeVal) mosaicSizeVal.textContent = wmState.mosaicSize + "px";
+          drawPreview();
         });
       }
       if (backToWatermark) {
